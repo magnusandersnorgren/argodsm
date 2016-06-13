@@ -5,6 +5,7 @@
  */
 #include "signal/signal.hpp"
 #include "virtual_memory/virtual_memory.hpp"
+#include "data_distribution/data_distribution.hpp"
 #include "swdsm.h"
 
 namespace vm = argo::virtual_memory;
@@ -576,22 +577,16 @@ void handler(int sig, siginfo_t *si, void *unused){
 	return;
 }
 
-
 unsigned long getHomenode(unsigned long addr){
-	unsigned long homenode = addr/size_of_chunk;
-	if(homenode >=(unsigned long)numtasks){
-		exit(EXIT_FAILURE);
-	}
-	return homenode;
+	using namespace argo::data_distribution;
+	global_ptr<char> gptr(reinterpret_cast<char*>(addr + reinterpret_cast<unsigned long>(startAddr)));
+	return gptr.node();
 }
 
 unsigned long getOffset(unsigned long addr){
-	//offset in local memory on remote node (homenode)
-	unsigned long offset = addr - (getHomenode(addr))*size_of_chunk;
-	if(offset >=size_of_chunk){
-		exit(EXIT_FAILURE);
-	}
-	return offset;
+	using namespace argo::data_distribution;
+	global_ptr<char> gptr(reinterpret_cast<char*>(addr + reinterpret_cast<unsigned long>(startAddr)));
+	return gptr.offset();
 }
 
 void *writeloop(void * x){
