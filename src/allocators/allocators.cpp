@@ -15,6 +15,16 @@ alloc::global_allocator<char> alloc::default_global_allocator;
 alloc::default_dynamic_allocator_t alloc::default_dynamic_allocator;
 alloc::collective_allocator alloc::default_collective_allocator;
 
+bool argo_allocators_is_loaded = false;
+
+static void argo_allocators_loaded()  __attribute__((constructor));
+void argo_allocators_loaded() {
+	argo_allocators_is_loaded = true;
+}
+
+bool argo_allocators_is_ready() {
+	return argo_allocators_is_loaded;
+}
 extern "C"
 void* collective_alloc(size_t size) {
 	using namespace argo::allocators;
@@ -33,9 +43,9 @@ void collective_free(void* ptr) {
 }
 
 extern "C"
-void* dynamic_alloc(size_t size) {
+void* dynamic_alloc(size_t size, size_t alignment) {
 	using namespace argo::allocators;
-	return static_cast<void*>(default_dynamic_allocator.allocate(size));
+	return static_cast<void*>(default_dynamic_allocator.allocate(size, alignment));
 }
 
 extern "C"

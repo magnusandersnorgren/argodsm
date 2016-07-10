@@ -72,8 +72,17 @@ void handler(int sig, siginfo_t* si, void* unused) {
 	std::signal(sig, SIG_DFL);
 	std::raise(sig);
 }
+
+static bool snb_is_loaded = false;
+static void snb_loaded()  __attribute__((constructor));
+void snb_loaded() {
+	snb_is_loaded = true;
+}
 namespace argo {
 	namespace backend {
+		bool is_loaded() {
+			return snb_is_loaded;
+		}
 
 		void init(std::size_t size) {
 			memory = static_cast<char*>(vm::allocate_mappable(4096, size));

@@ -10,6 +10,7 @@
 
 namespace vm = argo::virtual_memory;
 namespace sig = argo::signal;
+extern template class argo::data_distribution::naive_data_distribution<0>;
 
 /*Treads*/
 /** @brief Thread loads data into cache */
@@ -148,6 +149,11 @@ namespace {
 	constexpr unsigned long invalid_node = static_cast<unsigned long>(-1);
 }
 
+bool swdsm_is_loaded = false;
+static void swdsm_loaded()  __attribute__((constructor));
+void swdsm_loaded() {
+	swdsm_is_loaded = true;
+}
 unsigned long isPowerOf2(unsigned long x){
   unsigned long retval =  ((x & (x - 1)) == 0); //Checks if x is power of 2 (or zero)
   return retval;
@@ -995,6 +1001,7 @@ void * argo_gmalloc(unsigned long size){
 
 	if(ptrtmp == NULL){
 		pthread_mutex_unlock(&gmallocmutex);
+		printf("huehuehue\n");
 		exit(EXIT_FAILURE);
 	}
 	else{
@@ -1006,6 +1013,7 @@ void * argo_gmalloc(unsigned long size){
 }
 
 void argo_initialize(unsigned long long size){
+	printf("DOING IMPORTANT STUFF\n");
 	int i;
 	unsigned long j;
 	initmpi();
@@ -1204,7 +1212,9 @@ void argo_finalize(){
 		MPI_Win_free(&globalDataWindow[i]);
 	}
 	MPI_Win_free(&sharerWindow);
+	printf("all done, finalizing MPI\n");
 	MPI_Finalize();
+	printf("all done, MPI finalized\n");
 	return;
 }
 

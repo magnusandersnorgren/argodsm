@@ -205,7 +205,7 @@ namespace argo {
 				 * @param n The amount of Ts for which memory is allocated
 				 * @return The pointer to the allocated memory
 				 */
-				T* allocate(size_t n) {
+				T* allocate(size_t n, size_t alignment=32) {
 					/** @todo maybe detect uninitialized mempool in here? */
 
 					lock->lock();
@@ -217,7 +217,7 @@ namespace argo {
 					}
 					T* allocation;
 					try {
-						allocation = static_cast<T*>(mempool->reserve(n*sizeof(T)));
+						allocation = static_cast<T*>(mempool->reserve(n*sizeof(T), alignment));
 					} catch (typename MemoryPool::bad_alloc) {
 						auto avail = mempool->available();
 						if(avail > 0) {
@@ -231,7 +231,7 @@ namespace argo {
 							lock->unlock();
 							throw;
 						}
-						allocation = static_cast<T*>(mempool->reserve(n*sizeof(T)));
+						allocation = static_cast<T*>(mempool->reserve(n*sizeof(T), alignment));
 					}
 					allocation_size.insert({{allocation, n}});
 					lock->unlock();

@@ -96,13 +96,14 @@ namespace argo {
 				 * @return The pointer to the first byte of the newly reserved memory area
 				 * @todo move size check to separate function?
 				 */
-				char* reserve(std::size_t size) {
+				char* reserve(std::size_t size, std::size_t alignment=32) {
 					char* ptr;
 					global_tas_lock->lock();
 					if(*offset+size > max_size) {
 						global_tas_lock->unlock();
 						throw bad_alloc();
 					}
+					*offset = ((*offset+alignment-1)/alignment)*alignment;
 					ptr = &memory[*offset];
 					*offset += size;
 					global_tas_lock->unlock();
@@ -129,6 +130,11 @@ namespace argo {
 					avail = max_size - *offset;
 					global_tas_lock->unlock();
 					return avail;
+				}
+				
+				template<typename T>
+				bool is_inside(T* ptr) {
+					return memory != nullptr && static_cast<char*>(ptr) > memory && static_cast<char*>(ptr) < (memory + max_size);
 				}
 		};
 	} // namespace mempools

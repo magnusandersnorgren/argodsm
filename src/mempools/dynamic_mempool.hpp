@@ -10,6 +10,8 @@
 #include "../backend/backend.hpp"
 #include "../synchronization/broadcast.hpp"
 
+#include <signal.h>
+
 namespace argo {
 	namespace mempools {
 
@@ -126,13 +128,22 @@ namespace argo {
 				 * @return The pointer to the first byte of the newly reserved memory area
 				 * @todo move size check to separate function?
 				 */
-				char* reserve(std::size_t size) {
+				char* reserve(std::size_t size, std::size_t alignment=32) {
+					//if(!memory) grow(size);
+					//if(!memory || size > 10446744073709550848ul) raise(SIGUSR2);
+					//printf("checking %lu=%lu+%lu > %lu? ERROR: %d\n", offset+size, offset, size, max_size, (offset+size>max_size)); 
+					offset = ((offset+4095)/4096)*4096;
+					offset = ((offset+alignment-1)/alignment)*alignment;
 					if(offset+size > max_size) {
 						throw bad_alloc();
 						/* defensively return nullptr if throwing is not supported */
 						return nullptr;
 					}
 					char* ptr = &memory[offset];
+					//printf("reserve: %p, %lu mod 4096\n", ptr, (unsigned long)ptr%4096);
+					if(!ptr) {
+						printf("MEMORY POOL WEIRDNESS: %p. pool from %p has size %lu; current use: %lu ;; trying to get %lu\n", ptr, memory, max_size, offset, size);
+					}
 					offset += size;
 					return ptr;
 				}

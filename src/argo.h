@@ -41,4 +41,6 @@ int  argo_node_id();
  */
 int  argo_number_of_nodes();
 
+bool argo_is_ready();
+
 #endif /* argo_argo_h */

@@ -12,7 +12,7 @@
  * @param size number of bytes to allocate
  * @return pointer to the newly allocated memory
  */
-void* dynamic_alloc(size_t size);
+void* dynamic_alloc(size_t size, size_t alignment=32);
 
 /**
  * @brief basic free function for dynamic allocations, for C interface

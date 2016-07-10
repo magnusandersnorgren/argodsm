@@ -3,7 +3,7 @@
  * @brief This file implements some of the basic ArgoDSM calls
  * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
-
+#include<dlfcn.h>
 #include "argo.hpp"
 
 #include "allocators/collective_allocator.hpp"
@@ -21,10 +21,18 @@ mem::global_memory_pool<>* default_global_mempool;
 mem::dynamic_memory_pool<alloc::global_allocator, mem::NODE_ZERO_ONLY> collective_prepool(&alloc::default_global_allocator);
 mem::dynamic_memory_pool<alloc::global_allocator, mem::ALWAYS> dynamic_prepool(&alloc::default_global_allocator);
 
+static bool argo_is_loaded = false;
+static void argo_loaded()  __attribute__((constructor));
+void argo_loaded() {
+	argo_is_loaded = true;
+}
 namespace argo {
 	void init(size_t size) {
+		printf("argo global mempool @ %p\n", default_global_mempool);
 		vm::init();
+		printf("argo global mempool @ %p\n", default_global_mempool);
 		default_global_mempool = new mem::global_memory_pool<>(size);
+		printf("argo global mempool @ %p\n", default_global_mempool);
 		argo_reset();
 	}
 
@@ -71,5 +79,13 @@ extern "C" {
 
 	int argo_number_of_nodes() {
 		return argo::number_of_nodes();
+	}
+
+	bool argo_is_ready() {
+		//auto handle = dlopen("libnuma.so", RTLD_NOW|RTLD_GLOBAL);
+		//handle = dlopen("libpthread.so.0", RTLD_NOW|RTLD_GLOBAL);
+		//handle = dlopen("/sw/parallel/openmpi/tintin-sl6/1.8.5gcc5.1.0/lib/libopen-rte.so.7", RTLD_NOW|RTLD_GLOBAL);
+		//(void)handle;
+		return argo_is_loaded && argo_allocators_is_ready() && argo::backend::is_loaded();
 	}
 }

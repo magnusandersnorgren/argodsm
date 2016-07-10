@@ -77,6 +77,7 @@ namespace argo {
 		 */
 		std::size_t global_size();
 
+		bool is_loaded();
 
 		/**
 		 * @brief global memory space address

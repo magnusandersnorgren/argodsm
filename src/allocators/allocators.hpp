@@ -10,6 +10,8 @@
 #include "collective_allocator.hpp"
 #include "dynamic_allocator.hpp"
 
+bool argo_allocators_is_ready();
+
 namespace argo {
 	/**
 	 * @brief namespace for ArgoDSM's own allocators

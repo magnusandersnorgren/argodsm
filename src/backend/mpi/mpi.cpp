@@ -35,6 +35,12 @@ extern MPI_Win  *globalDataWindow;
 #include <semaphore.h>
 extern sem_t ibsem;
 
+extern bool swdsm_is_loaded;
+static bool mpib_is_loaded = false;
+static void mpib_loaded()  __attribute__((constructor));
+void mpib_loaded() {
+	mpib_is_loaded = true;
+}
 /**
  * @brief Returns an MPI integer type that exactly matches in size the argument given
  *
@@ -130,6 +136,9 @@ static MPI_Datatype fitting_mpi_float(std::size_t size) {
 
 namespace argo {
 	namespace backend {
+		bool is_loaded() {
+			return mpib_is_loaded && swdsm_is_loaded;
+		}
 		void init(std::size_t size) {
 			argo_initialize(size);
 		}

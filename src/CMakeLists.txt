@@ -68,7 +68,13 @@ endif(ARGO_USE_LIBNUMA)
 
 target_link_libraries(argo ${vm_libs})
 
+add_library(launcher launcher.cpp)
+target_link_libraries(launcher argo argobackend-mpi dl)
+#target_link_libraries(launcher dl)
 #install (TARGETS argo DESTINATION bin)
+
+add_executable(memnode memnode.cpp)
+target_link_libraries(memnode argo argobackend-mpi)
 
 install(TARGETS argo
 	COMPONENT "Runtime"

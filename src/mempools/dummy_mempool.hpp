@@ -32,6 +32,14 @@ namespace argo {
 			memory_pool(std::size_t size) : memory(new char[size]), max_size(size), offset{0} {}
 
 			/**
+			 * @brief  Resets the memory pool to the initial state instead of de-allocating and (re)allocating all buffers again.
+			 * @details Resets the memory pool to the initial state instead of de-allocating and (re)allocating all buffers again.
+			 * Any allocator or memory pool depending on this memory pool now has undefined behaviour.
+			 */
+			void reset() {
+				offset = 0;
+			}
+			/**
 			 * @brief Reserve more memory
 			 * @param size Amount of memory reserved
 			 * @return The pointer to the first byte of the newly reserved memory area
@@ -49,6 +57,7 @@ namespace argo {
 			 * @param size minimum size to grow
 			 */
 			void grow(std::size_t size) {
+				(void) size;
 				throw std::bad_alloc();
 			}
 
