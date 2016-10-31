@@ -76,7 +76,7 @@ target_link_libraries(launcher argo argobackend-mpi dl)
 add_executable(memnode memnode.cpp)
 target_link_libraries(memnode argo argobackend-mpi)
 
-install(TARGETS argo
+install(TARGETS argo launcher memnode
 	COMPONENT "Runtime"
 	RUNTIME DESTINATION bin
 	LIBRARY DESTINATION lib

@@ -126,7 +126,7 @@ static void launcher_init() {
 	//static_mp::print();
 	bool was_argo_code = is_argo_code;
 	is_argo_code = true;
-	argo::init(1l*1024*1024*1024); // TODO make this runtime choosable
+	argo::init(4l*1024*1024*1024); // TODO make this runtime choosable
 	//printf("mempool sanity: %p -> %p\n", default_global_mempool, default_global_mempool->memory);
 	std::cout << "inited argo" << std::endl;
 	struct sigaction argosig;
