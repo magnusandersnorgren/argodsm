@@ -3,10 +3,12 @@
  * @brief This file implements the MPI-backend of ArgoDSM
  * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
+#include "signal/signal.hpp"
 #include "virtual_memory/virtual_memory.hpp"
 #include "swdsm.h"
 
 namespace vm = argo::virtual_memory;
+namespace sig = argo::signal;
 
 /*Treads*/
 /** @brief Thread loads data into cache */
@@ -308,39 +310,15 @@ unsigned long alignAddr(unsigned long addr){
 	return addr;
 }
 
-/**
- * @brief old signal handler
- * @details The last signal handler for SIGSEGV. This should only be set the first time
- *          we set our own signal handler.
- */
-struct sigaction old_sigaction;
-
-/**
- * @brief Restore the last stored signal handler for SIGSEGV
- */
-static void restore_old_sigaction() {
-	sigaction(SIGSEGV, &old_sigaction, NULL);
-}
-
 void handler(int sig, siginfo_t *si, void *unused){
 	UNUSED_PARAM(sig);
 	UNUSED_PARAM(unused);
 	double t1 = MPI_Wtime();
 
-	/* check whether address is out of bounds (lower end) of shared memory area */
-	if (si->si_addr < startAddr) {
-		restore_old_sigaction();
-		return;
-	}
 	unsigned long tag;
 	argo_byte owner,state;
 	unsigned long distrAddr =  (unsigned long)((unsigned long)(si->si_addr) - (unsigned long)(startAddr));
 
-	/* check whether address is out of bounds (upper end) of shared memory area */
-	if (distrAddr >= size_of_all) {
-		restore_old_sigaction();
-		return;
-	}
 	unsigned long alignedDistrAddr = alignAddr(distrAddr);
 	unsigned long remCACHELINE = alignedDistrAddr % (CACHELINE*pagesize);
 	unsigned long lineAddr = alignedDistrAddr - remCACHELINE;
@@ -1032,18 +1010,6 @@ void * argo_gmalloc(unsigned long size){
 	return ptrtmp;
 }
 
-void set_sighandler(){
-	sigset_t sigs;
-	struct sigaction sa;
-	sigemptyset( &sigs );
-	sigaddset( &sigs, SIGSEGV );
-
-	sa.sa_flags = SA_SIGINFO;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_sigaction = handler;
-	sigaction(SIGSEGV, &sa, &old_sigaction);
-}
-
 void argo_initialize(unsigned long long size){
 	int i;
 	unsigned long j;
@@ -1120,7 +1086,7 @@ void argo_initialize(unsigned long long size){
 	size_of_all = size; //total distr. global memory
 	GLOBAL_NULL=size_of_all+1;
 	size_of_chunk = size/(numtasks); //part on each node
-	set_sighandler();
+	sig::signal_handler<SIGSEGV>::install_argo_handler(&handler);
 
 	unsigned long cacheControlSize = sizeof(control_data)*cachesize;
 	unsigned long gwritersize = classificationSize*sizeof(long);

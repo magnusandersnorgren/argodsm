@@ -5,6 +5,7 @@
  */
 
 #include "data_distribution/data_distribution.hpp"
+#include "signal/signal.hpp"
 #include "synchronization/global_tas_lock.hpp"
 #include "types/types.hpp"
 #include "virtual_memory/virtual_memory.hpp"
@@ -12,11 +13,13 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <csignal>
 #include <cstddef>
 #include <cstring>
 #include <mutex>
 
 namespace vm = argo::virtual_memory;
+namespace sig = argo::signal;
 
 /** @brief a lock for atomically executed operations */
 std::mutex atomic_op_mutex;
@@ -54,6 +57,21 @@ char* memory;
  */
 std::size_t memory_size;
 
+/**
+ * @brief a dummy signal handler function
+ * @warning this function is not strictly portable because it resets the handler and re-raises the signal
+ * @param sig signal number
+ * @param si additional information
+ * @param unused traditionally unused
+ * @see check `man sigaction` for additional information
+ */
+void handler(int sig, siginfo_t* si, void* unused) {
+	(void) si;
+	(void) unused;
+	printf("A segfault was encountered in ArgoDSM memory. This should never happen.");
+	std::signal(sig, SIG_DFL);
+	std::raise(sig);
+}
 namespace argo {
 	namespace backend {
 
@@ -62,6 +80,7 @@ namespace argo {
 			memory_size = size;
 			using namespace data_distribution;
 			naive_data_distribution<0>::set_memory_space(nodes, memory, size);
+			sig::signal_handler<SIGSEGV>::install_argo_handler(&handler);
 		}
 
 		node_id_t node_id() {
