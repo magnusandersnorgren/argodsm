@@ -75,7 +75,7 @@ typedef struct myControlData //global cache control data / directory
 		/** @brief Tracks if page is dirty or clean */
 		argo_byte dirty;   //Is this locally dirty?  
 		/** @brief Tracks address of page */
-		unsigned long tag;   //addres of global page in distr mem
+		long tag;   //addres of global page in distr mem
 } control_data;
 
 /** @brief Struct containing statistics */

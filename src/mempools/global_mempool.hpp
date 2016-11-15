@@ -70,6 +70,7 @@ namespace argo {
 
 				/** @todo Documentation */
 				~global_memory_pool(){
+					printf("Total memory used during ArgoDSM lifetime: %ld\n", *offset);
 					delete global_tas_lock;
 					backend::finalize();
 				};

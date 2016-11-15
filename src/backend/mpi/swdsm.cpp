@@ -98,13 +98,13 @@ sem_t ibsem;
 
 /*Loading and Prefetching*/
 /** @brief Tracking address of pages that should be loaded by loadthread1 */
-unsigned long *loadline;
+long *loadline;
 /** @brief Tracking cacheindex of pages that should be loaded by loadthread1 */
-unsigned long *loadtag;
+long *loadtag;
 /** @brief Tracking address of pages that should be loaded by loadthread2 */
-unsigned long *prefetchline;
+long *prefetchline;
 /** @brief Tracking cacheindex of pages that should be loaded by loadthread2 */
-unsigned long *prefetchtag;
+long *prefetchtag;
 /** @brief loadthread1 waits on this to start loading remote pages */
 sem_t loadstartsem;
 /** @brief signalhandler waits on this to complete a transfer */
@@ -124,7 +124,7 @@ int locknumber=0;
 
 /*Global allocation*/
 /** @brief  Keeps track of allocated memory in the global address space*/
-unsigned long *allocationOffset;
+long *allocationOffset;
 /** @brief  Protects access to global allocator*/
 pthread_mutex_t gmallocmutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -134,13 +134,13 @@ void * startAddr;
 /** @brief  Points to start of global address space this process is serving */
 char* globalData;
 /** @brief  Size of global address space*/
-unsigned long size_of_all;
+long size_of_all;
 /** @brief  Size of this process part of global address space*/
 unsigned long size_of_chunk;
 /** @brief  size of a page */
 static const unsigned int pagesize = 4096;
 /** @brief  Magic value for invalid cacheindices */
-unsigned long GLOBAL_NULL;
+long GLOBAL_NULL;
 /** @brief  Statistics */
 argo_statistics stats;
 
@@ -167,11 +167,11 @@ void flushWriteBuffer(void){
 	pthread_mutex_lock(&wbmutex);
 
   for(i = 0; i < cachesize; i+=CACHELINE){
-    unsigned long distrAddr = cacheControl[i].tag;
+    long distrAddr = cacheControl[i].tag;
     if(distrAddr != GLOBAL_NULL){
 
-      unsigned long distrAddr = cacheControl[i].tag;
-      unsigned long lineAddr = distrAddr/(CACHELINE*pagesize);
+      long distrAddr = cacheControl[i].tag;
+      long lineAddr = distrAddr/(CACHELINE*pagesize);
       lineAddr*=(pagesize*CACHELINE);
 			void * lineptr = (char*)startAddr + lineAddr;
 
@@ -323,17 +323,18 @@ void handler(int sig, siginfo_t *si, void *unused){
 	double t1 = MPI_Wtime();
 
 	unsigned long tag;
+	long tag;
 	argo_byte owner,state;
-	unsigned long distrAddr =  (unsigned long)((unsigned long)(si->si_addr) - (unsigned long)(startAddr));
+	long distrAddr =  (long)((unsigned long)(si->si_addr) - (unsigned long)(startAddr));
 
 	unsigned long alignedDistrAddr = alignAddr(distrAddr);
 	unsigned long remCACHELINE = alignedDistrAddr % (CACHELINE*pagesize);
-	unsigned long lineAddr = alignedDistrAddr - remCACHELINE;
+	long lineAddr = alignedDistrAddr - remCACHELINE;
 	unsigned long classidx = get_classification_index(lineAddr);
 
 	unsigned long * localAlignedAddr = (unsigned long *)((char*)startAddr + lineAddr);
-	unsigned long startIndex = getCacheIndex(lineAddr);
-	unsigned long cacheIndex = getCacheIndex(alignedDistrAddr);
+	long startIndex = getCacheIndex(lineAddr);
+	long cacheIndex = getCacheIndex(alignedDistrAddr);
 	cacheIndex = startIndex;
 	alignedDistrAddr = lineAddr;
 
@@ -369,8 +370,13 @@ void handler(int sig, siginfo_t *si, void *unused){
 				if(owner==(unsigned long)workrank){
 					throw "bad owner in local access";
 				}
+				else if(owner > 3) {
+					printf("WTF 1\n");
+				}
 				else{
 					/* update remote private holder to shared */
+				if(owner > 3)
+					printf("WTF 2\n");
 					MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(owner, sharerWindow);
@@ -399,6 +405,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 						break;
 					}
 				}
+				if(owner > 3)
+					printf("WTF 3\n");
 				MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 				MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 				MPI_Win_unlock(owner, sharerWindow);
@@ -407,6 +415,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 				int n;
 				for(n=0; n<numtasks; n++){
 					if(n != workrank && ((1<<n)&sharers) != 0){
+						if(n > 3)
+							printf("WTF 4\n");
 						MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
 						MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 						MPI_Win_unlock(n, sharerWindow);
@@ -535,6 +545,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 		MPI_Win_unlock(workrank, sharerWindow);
 
 		/* register and get latest sharers / writers */
+		if(homenode > 3)
+			printf("WTF 5\n");
 		MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 		MPI_Get_accumulate(&id, 1,MPI_LONG,&writers,1,MPI_LONG,homenode,
 			classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -556,6 +568,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 					break;
 				}
 			}
+			if(owner > 3)
+				printf("WTF 6\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 			MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 			MPI_Win_unlock(owner, sharerWindow);
@@ -564,6 +578,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 			int n;
 			for(n=0; n<numtasks; n++){
 				if(n != workrank && ((1<<n)&sharers) != 0){
+					if(n > 3)
+						printf("WTF 7\n");
 					MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(n, sharerWindow);
@@ -599,7 +615,7 @@ void *writeloop(void * x){
 	UNUSED_PARAM(x);
 	unsigned long i;
 	unsigned long oldstart;
-	unsigned long idx,tag;
+	long idx,tag;
 
 	while(1){
 
@@ -655,7 +671,7 @@ void * loadcacheline(void * x){
 
 		unsigned long pageAddr = loadtag[0];
 		unsigned long blocksize = pagesize*CACHELINE;
-		unsigned long lineAddr = pageAddr/blocksize;
+		long lineAddr = pageAddr/blocksize;
 		lineAddr *= blocksize;
 
 		unsigned long startidx = cacheIndex/CACHELINE;
@@ -667,7 +683,7 @@ void * loadcacheline(void * x){
 		}
 
 		argo_byte tmpstate = cacheControl[startidx].state;
-		unsigned long tmptag = cacheControl[startidx].tag;
+		long tmptag = cacheControl[startidx].tag;
 
 		if(tmptag == lineAddr && tmpstate != INVALID){
 			sem_post(&ibsem);
@@ -729,6 +745,8 @@ void * loadcacheline(void * x){
 		homenode = getHomenode(lineAddr);
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
+			if(homenode > 3)
+				printf("WTF 8\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
 				homenode, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
@@ -811,7 +829,7 @@ void * prefetchcacheline(void * x){
 		sem_wait(&ibsem);
 		unsigned long pageAddr = prefetchtag[0];
 		unsigned long blocksize = pagesize*CACHELINE;
-		unsigned long lineAddr = pageAddr/blocksize;
+		long lineAddr = pageAddr/blocksize;
 		lineAddr *= blocksize;
 		unsigned long startidx = cacheIndex/CACHELINE;
 		startidx*=CACHELINE;
@@ -821,7 +839,7 @@ void * prefetchcacheline(void * x){
 			end = cachesize;
 		}
 		argo_byte tmpstate = cacheControl[startidx].state;
-		unsigned long tmptag = cacheControl[startidx].tag;
+		long tmptag = cacheControl[startidx].tag;
 		if(tmptag == lineAddr && tmpstate != INVALID){ //trying to load already valid ..
 			sem_post(&ibsem);
 			sem_post(&prefetchwaitsem);
@@ -882,6 +900,8 @@ void * prefetchcacheline(void * x){
 		homenode = getHomenode(lineAddr);
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
+				if(homenode > 3)
+					printf("WTF 11\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
 				homenode, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
@@ -975,8 +995,8 @@ unsigned int getThreadCount(){
 }
 
 //My sort of allocatefunction now since parmacs macros had this design
-void * argo_gmalloc(unsigned long size){
-	if(argo_get_nodes()==1){return malloc(size);}
+void * argo_gmalloc(long size){
+	//if(argo_get_nodes()==1){return malloc(size);}
 
 	pthread_mutex_lock(&gmallocmutex);
 	MPI_Barrier(workcomm);
@@ -1054,10 +1074,10 @@ void argo_initialize(unsigned long long size){
 		barwindowsused[i] = 0;
 	}
 
-	prefetchline = (unsigned long *) malloc(sizeof(unsigned long)*numtasks);
-	loadline = (unsigned long *) malloc(sizeof(unsigned long)*numtasks);
-	prefetchtag = (unsigned long *) malloc(sizeof(unsigned long)*numtasks);
-	loadtag = (unsigned long *) malloc(sizeof(unsigned long)*numtasks);
+	prefetchline = (long *) malloc(sizeof(unsigned long)*numtasks);
+	loadline = (long *) malloc(sizeof(unsigned long)*numtasks);
+	prefetchtag = (long *) malloc(sizeof(unsigned long)*numtasks);
+	loadtag = (long *) malloc(sizeof(unsigned long)*numtasks);
 
 	int *workranks = (int *) malloc(sizeof(int)*numtasks);
 	int *procranks = (int *) malloc(sizeof(int)*2);
@@ -1089,7 +1109,11 @@ void argo_initialize(unsigned long long size){
 	size_of_all = size; //total distr. global memory
 	GLOBAL_NULL=size_of_all+1;
 	size_of_chunk = size/(numtasks); //part on each node
+	printf("TRACE -2\n");
 	sig::signal_handler<SIGSEGV>::install_argo_handler(&handler);
+	printf("TRACE -1\n");
+	set_sighandler();
+	printf("TRACE 0\n");
 
 	unsigned long cacheControlSize = sizeof(control_data)*cachesize;
 	unsigned long gwritersize = classificationSize*sizeof(long);
@@ -1104,6 +1128,7 @@ void argo_initialize(unsigned long long size){
 	gwritersize *= pagesize;
 
 	cacheoffset = pagesize*cachesize+cacheControlSize;
+	printf("TRACE 1\n");
 
 	globalData = static_cast<char*>(vm::allocate_mappable(pagesize, size_of_chunk));
 	cacheData = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
@@ -1119,6 +1144,7 @@ void argo_initialize(unsigned long long size){
 	pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
 	globalSharers = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, gwritersize));
 
+	printf("TRACE 2\n");
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
 	int name_len;
 	MPI_Get_processor_name(processor_name, &name_len);
@@ -1126,6 +1152,7 @@ void argo_initialize(unsigned long long size){
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	void* tmpcache;
+	printf("TRACE 3\n");
 	tmpcache=cacheData;
 	vm::map_memory(tmpcache, pagesize*cachesize, 0, PROT_READ|PROT_WRITE);
 
@@ -1145,6 +1172,7 @@ void argo_initialize(unsigned long long size){
 	tmpcache=lockbuffer;
 	vm::map_memory(tmpcache, pagesize, current_offset, PROT_READ|PROT_WRITE);
 
+	printf("TRACE 4\n");
 	sem_init(&loadwaitsem,0,0);
 	sem_init(&loadstartsem,0,0);
 	sem_init(&prefetchstartsem,0,0);
@@ -1156,18 +1184,22 @@ void argo_initialize(unsigned long long size){
 	sem_init(&ibsem,0,1);
 	sem_init(&globallocksem,0,1);
 
-	allocationOffset = (unsigned long *)calloc(1,sizeof(unsigned long));
+	allocationOffset = (long *)calloc(1,sizeof(unsigned long));
 	globalDataWindow = (MPI_Win*)malloc(sizeof(MPI_Win)*numtasks);
 
+	printf("TRACE 5\n");
 	for(i = 0; i < numtasks; i++){
+		printf("TRACE 5.%d\n", i);
  		MPI_Win_create(globalData, size_of_chunk*sizeof(argo_byte), 1,
 									 MPI_INFO_NULL, MPI_COMM_WORLD, &globalDataWindow[i]);
 	}
 
+	printf("TRACE 6\n");
 	MPI_Win_create(globalSharers, gwritersize, sizeof(unsigned long),
 								 MPI_INFO_NULL, MPI_COMM_WORLD, &sharerWindow);
 	MPI_Win_create(lockbuffer, pagesize, 1, MPI_INFO_NULL, MPI_COMM_WORLD, &lockWindow);
 
+	printf("TRACE 7\n");
 	memset(pagecopy, 0, cachesize*pagesize);
 	memset(touchedcache, 0, cachesize);
 	memset(globalData, 0, size_of_chunk*sizeof(argo_byte));
@@ -1182,9 +1214,11 @@ void argo_initialize(unsigned long long size){
 		cacheControl[j].dirty = CLEAN;
 	}
 
+	printf("TRACE 8\n");
 	pthread_create(&loadthread1,NULL,&loadcacheline,NULL);
 	pthread_create(&loadthread2,NULL,&prefetchcacheline,(void*)NULL);
 	pthread_create(&writethread,NULL,&writeloop,(void*)NULL);
+	printf("TRACE 9\n");
 	argo_reset_coherence(1);
 }
 
@@ -1227,10 +1261,10 @@ void self_invalidation(){
 	t1 = MPI_Wtime();
 	for(i = 0; i < cachesize; i+=CACHELINE){
 		if(touchedcache[i] != 0){
-			unsigned long distrAddr = cacheControl[i].tag;
-			unsigned long lineAddr = distrAddr/(CACHELINE*pagesize);
+			long distrAddr = cacheControl[i].tag;
+			long lineAddr = distrAddr/(CACHELINE*pagesize);
 			lineAddr*=(pagesize*CACHELINE);
-			unsigned long classidx = get_classification_index(lineAddr);
+			long classidx = get_classification_index(lineAddr);
 			argo_byte dirty = cacheControl[i].dirty;
 
 			if(flushed == 0 && dirty == DIRTY){
@@ -1371,6 +1405,8 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 	size_t drf_unit = sizeof(char);
 
 	if(barwindowsused[homenode] == 0){
+				if(homenode > 3)
+					printf("WTF 14\n");
 		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, homenode, 0, globalDataWindow[homenode]);
 		barwindowsused[homenode] = 1;
 	}

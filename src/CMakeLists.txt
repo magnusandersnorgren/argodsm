@@ -69,7 +69,9 @@ endif(ARGO_USE_LIBNUMA)
 target_link_libraries(argo ${vm_libs})
 
 add_library(launcher launcher.cpp)
+add_library(launcher-sn launcher.cpp)
 target_link_libraries(launcher argo argobackend-mpi dl)
+target_link_libraries(launcher-sn argo argobackend-singlenode dl)
 #target_link_libraries(launcher dl)
 #install (TARGETS argo DESTINATION bin)
 

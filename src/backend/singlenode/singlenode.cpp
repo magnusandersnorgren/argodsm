@@ -21,6 +21,9 @@
 namespace vm = argo::virtual_memory;
 namespace sig = argo::signal;
 
+#include <signal.h>
+struct sigaction old_struct_sigaction;
+
 /** @brief a lock for atomically executed operations */
 std::mutex atomic_op_mutex;
 
