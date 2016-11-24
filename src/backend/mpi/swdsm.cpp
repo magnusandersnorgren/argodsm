@@ -1404,38 +1404,14 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 	unsigned long homenode = getHomenode(addr);
 	unsigned long offset = getOffset(addr);
 
-	char * copy = (char *)(pagecopy + index*pagesize);
 	char * real = (char *)startAddr+addr;
-	size_t drf_unit = sizeof(char);
 
 	if(barwindowsused[homenode] == 0){
-				if(homenode > 3)
-					printf("WTF 14\n");
 		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, homenode, 0, globalDataWindow[homenode]);
 		barwindowsused[homenode] = 1;
 	}
 
-	for(i = 0; i < pagesize; i+=drf_unit){
-		int branchval;
-		for(j=i; j < i+drf_unit; j++){
-			branchval = real[j] != copy[j];
-			if(branchval != 0){
-				break;
-			}
-		}
-		if(branchval != 0){
-			cnt+=drf_unit;
-		}
-		else{
-			if(cnt > 0){
-				MPI_Put(&real[i-cnt], cnt, MPI_BYTE, homenode, offset+(i-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
-				cnt = 0;
-			}
-		}
-	}
-	if(cnt > 0){
-		MPI_Put(&real[i-cnt], cnt, MPI_BYTE, homenode, offset+(i-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
-	}
+	MPI_Put(real, 4096, MPI_BYTE, homenode, offset, 4096, MPI_BYTE, globalDataWindow[homenode]);
 	stats.stores++;
 }
 
