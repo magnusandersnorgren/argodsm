@@ -322,7 +322,6 @@ void handler(int sig, siginfo_t *si, void *unused){
 	UNUSED_PARAM(unused);
 	double t1 = MPI_Wtime();
 
-	unsigned long tag;
 	long tag;
 	argo_byte owner,state;
 	long distrAddr =  (long)((unsigned long)(si->si_addr) - (unsigned long)(startAddr));
@@ -370,12 +369,12 @@ void handler(int sig, siginfo_t *si, void *unused){
 				if(owner==(unsigned long)workrank){
 					throw "bad owner in local access";
 				}
-				else if(owner > 3) {
+				else if(owner > 7) {
 					printf("WTF 1\n");
 				}
 				else{
 					/* update remote private holder to shared */
-				if(owner > 3)
+				if(owner > 7)
 					printf("WTF 2\n");
 					MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -405,7 +404,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 						break;
 					}
 				}
-				if(owner > 3)
+				if(owner > 7)
 					printf("WTF 3\n");
 				MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 				MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -415,7 +414,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 				int n;
 				for(n=0; n<numtasks; n++){
 					if(n != workrank && ((1<<n)&sharers) != 0){
-						if(n > 3)
+						if(n > 7)
 							printf("WTF 4\n");
 						MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
 						MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -545,7 +544,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		MPI_Win_unlock(workrank, sharerWindow);
 
 		/* register and get latest sharers / writers */
-		if(homenode > 3)
+		if(homenode > 7)
 			printf("WTF 5\n");
 		MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 		MPI_Get_accumulate(&id, 1,MPI_LONG,&writers,1,MPI_LONG,homenode,
@@ -568,7 +567,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 					break;
 				}
 			}
-			if(owner > 3)
+			if(owner > 7)
 				printf("WTF 6\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 			MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -578,7 +577,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 			int n;
 			for(n=0; n<numtasks; n++){
 				if(n != workrank && ((1<<n)&sharers) != 0){
-					if(n > 3)
+					if(n > 7)
 						printf("WTF 7\n");
 					MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -745,7 +744,7 @@ void * loadcacheline(void * x){
 		homenode = getHomenode(lineAddr);
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
-			if(homenode > 3)
+			if(homenode > 7)
 				printf("WTF 8\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
@@ -900,7 +899,7 @@ void * prefetchcacheline(void * x){
 		homenode = getHomenode(lineAddr);
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
-				if(homenode > 3)
+				if(homenode > 7)
 					printf("WTF 11\n");
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
@@ -1109,10 +1108,8 @@ void argo_initialize(unsigned long long size){
 	size_of_all = size; //total distr. global memory
 	GLOBAL_NULL=size_of_all+1;
 	size_of_chunk = size/(numtasks); //part on each node
-	printf("TRACE -2\n");
-	sig::signal_handler<SIGSEGV>::install_argo_handler(&handler);
 	printf("TRACE -1\n");
-	set_sighandler();
+	sig::signal_handler<SIGSEGV>::install_argo_handler(&handler);
 	printf("TRACE 0\n");
 
 	unsigned long cacheControlSize = sizeof(control_data)*cachesize;
@@ -1187,7 +1184,7 @@ void argo_initialize(unsigned long long size){
 	allocationOffset = (long *)calloc(1,sizeof(unsigned long));
 	globalDataWindow = (MPI_Win*)malloc(sizeof(MPI_Win)*numtasks);
 
-	printf("TRACE 5\n");
+	printf("TRACE 5 : numtasks = %d\n", numtasks);
 	for(i = 0; i < numtasks; i++){
 		printf("TRACE 5.%d\n", i);
  		MPI_Win_create(globalData, size_of_chunk*sizeof(argo_byte), 1,
@@ -1198,16 +1195,23 @@ void argo_initialize(unsigned long long size){
 	MPI_Win_create(globalSharers, gwritersize, sizeof(unsigned long),
 								 MPI_INFO_NULL, MPI_COMM_WORLD, &sharerWindow);
 	MPI_Win_create(lockbuffer, pagesize, 1, MPI_INFO_NULL, MPI_COMM_WORLD, &lockWindow);
-
+/*
 	printf("TRACE 7\n");
 	memset(pagecopy, 0, cachesize*pagesize);
+	printf("TRACE 7.1\n");
 	memset(touchedcache, 0, cachesize);
-	memset(globalData, 0, size_of_chunk*sizeof(argo_byte));
+	printf("TRACE 7.2\n");
+	//memset(globalData, 0, size_of_chunk*sizeof(argo_byte));
+	printf("TRACE 7.3\n");
 	memset(cacheData, 0, cachesize*pagesize);
+	printf("TRACE 7.4\n");
 	memset(lockbuffer, 0, pagesize);
+	printf("TRACE 7.5\n");
 	memset(globalSharers, 0, gwritersize);
+	printf("TRACE 7.6\n");
 	memset(cacheControl, 0, cachesize*sizeof(control_data));
-
+*/
+	printf("TRACE 7.7\n");
 	for(j=0; j<cachesize; j++){
 		cacheControl[j].tag = GLOBAL_NULL;
 		cacheControl[j].state = INVALID;

@@ -23,7 +23,7 @@ using global_uint = typename argo::data_distribution::global_ptr<unsigned>;
 using global_intptr = typename argo::data_distribution::global_ptr<int*>;
 
 /** @brief ArgoDSM memory size */
-constexpr std::size_t size = 1<<20; // 1MB
+constexpr std::size_t size = 1<<30; // 1MB
 /** @brief Time to wait before assuming a deadlock has occured */
 constexpr std::chrono::minutes deadlock_threshold{1}; // Choosen for no reason
 

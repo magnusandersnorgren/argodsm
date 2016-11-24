@@ -53,6 +53,7 @@ namespace argo {
 			statvfs("/dev/shm", &b);
 			avail = b.f_bavail * b.f_bsize;
 			if(avail > static_cast<unsigned long>(ARGO_SIZE_LIMIT)) {
+				std::cerr << "Warning: reduced argo size to size limit" << std::endl;
 				avail = ARGO_SIZE_LIMIT;
 			}
 			std::string filename = "/argocache" + std::to_string(getpid());
@@ -69,6 +70,7 @@ namespace argo {
 			}
 			/** @todo check desired range is free */
 			constexpr int flags = MAP_ANONYMOUS|MAP_SHARED|MAP_FIXED;
+			std::cerr << "maximum ArgoDSM backing size on this node: " << avail << std::endl;
 			start_addr = ::mmap((void*)ARGO_START, avail, PROT_NONE, flags, -1, 0);
 			if(start_addr == MAP_FAILED) {
 				std::cerr << msg_main_mmap_fail << std::endl;

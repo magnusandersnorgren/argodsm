@@ -23,7 +23,7 @@
 #include "gtest/gtest.h"
 
 /** @brief Amount of memory initialized by ArgoDSM */
-size_t size = 1<<20;
+size_t size = 1<<30;
 /** @brief number of threads to spawn for some of the tests */
 constexpr int nThreads = 16;
 /** @brief number of itereations to run for some of the tests */
