@@ -38,7 +38,7 @@
 
 #ifndef CACHELINE
 /** @brief Size of a ArgoDSM cacheline in number of pages */
-#define CACHELINE 1L
+#define CACHELINE 4L
 #endif
 
 #ifndef NUM_THREADS

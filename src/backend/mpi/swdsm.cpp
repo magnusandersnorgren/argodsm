@@ -1053,7 +1053,7 @@ void argo_initialize(unsigned long long size){
 		pthread_barrier_init(&threadbarrier[i],NULL,i);
 	}
 
-	cachesize = size+pagesize*CACHELINE;
+	cachesize = 5l*(1<<30); //(size+pagesize*CACHELINE) / 32;
 	cachesize /= pagesize;
 	cachesize /= CACHELINE;
 	cachesize *= CACHELINE;

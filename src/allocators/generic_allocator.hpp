@@ -226,7 +226,10 @@ namespace argo {
 							allocation_size.insert({{allocation, n}});
 						}
 						try {
-							mempool->grow(n*sizeof(T));
+							size_t growby = n*sizeof(T);
+							//if(growby < 64*512*4096)
+							//	growby = 64*512*4096;
+							mempool->grow(growby);
 						}catch(std::bad_alloc){
 							lock->unlock();
 							throw;
