@@ -397,7 +397,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 			}
 			/* set page to permit reads and map it to the page cache */
 			/** @todo Set cache offset to a variable instead of calculating it here */
-			vm::map_memory(localAlignedAddr, pagesize*CACHELINE, cacheoffset+offset, PROT_READ);
+			vm::map_memory(localAlignedAddr, pagesize*CACHELINE, cacheoffset+offset, PROT_READ|PROT_WRITE);
 
 		}
 		else{
@@ -529,79 +529,12 @@ void handler(int sig, siginfo_t *si, void *unused){
 		stats.loadtime+=t2-t1;
 		return;
 	}
-
-	unsigned long line = startIndex / CACHELINE;
-	line *= CACHELINE;
-
-	if(cacheControl[line].dirty == DIRTY){
-		pthread_mutex_unlock(&cachemutex);
-		return;
+	else{
+	  /* Why are we here??
+	     -Probably another thread faulting concurrently on the same page and signal-handler executing tiwce*/
+	  pthread_mutex_unlock(&cachemutex);
+	  return;
 	}
-
-
-	touchedcache[line] = 1;
-	cacheControl[line].dirty = DIRTY;
-
-	sem_wait(&ibsem);
-	MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
-	unsigned long writers = globalSharers[classidx+1];
-	unsigned long sharers = globalSharers[classidx];
-	MPI_Win_unlock(workrank, sharerWindow);
-	/* Either already registered write - or 1 or 0 other writers already cached */
-	if(writers != id && isPowerOf2(writers)){
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
-		globalSharers[classidx+1] |= id; //register locally
-		MPI_Win_unlock(workrank, sharerWindow);
-
-		/* register and get latest sharers / writers */
-		MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
-		MPI_Get_accumulate(&id, 1,MPI_LONG,&writers,1,MPI_LONG,homenode,
-			classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
-		MPI_Get(&sharers,1, MPI_LONG, homenode, classidx, 1,MPI_LONG,sharerWindow);
-		MPI_Win_unlock(homenode, sharerWindow);
-		/* We get result of accumulation before operation so we need to account for that */
-		writers |= id;
-		/* Just add the (potentially) new sharers fetched to local copy */
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
-		globalSharers[classidx] |= sharers;
-		MPI_Win_unlock(workrank, sharerWindow);
-
-		/* check if we need to update */
-		if(writers != id && writers != 0 && isPowerOf2(writers&invid)){
-			int n;
-			for(n=0; n<numtasks; n++){
-				if(((unsigned long)(1<<n))==(writers&invid)){
-					owner = n; //just get rank...
-					break;
-				}
-			}
-			MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
-			MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
-			MPI_Win_unlock(owner, sharerWindow);
-		}
-		else if(writers==id || writers==0){
-			int n;
-			for(n=0; n<numtasks; n++){
-				if(n != workrank && ((1<<n)&sharers) != 0){
-					MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
-					MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
-					MPI_Win_unlock(n, sharerWindow);
-				}
-			}
-		}
-	}
-	sem_post(&ibsem);
-#ifndef NO_DIFF
-	unsigned char * real = (unsigned char *)(localAlignedAddr);
-	unsigned char * copy = (unsigned char *)(pagecopy + line*pagesize);
-	memcpy(copy,real,CACHELINE*pagesize);
-#endif
-	addToWriteBuffer(startIndex);
-	mprotect(localAlignedAddr, pagesize*CACHELINE,PROT_WRITE|PROT_READ);
-	pthread_mutex_unlock(&cachemutex);
-	double t2 = MPI_Wtime();
-	stats.storetime += t2-t1;
-	return;
 }
 
 
@@ -620,47 +553,6 @@ unsigned long getOffset(unsigned long addr){
 		exit(EXIT_FAILURE);
 	}
 	return offset;
-}
-
-void *writeloop(void * x){
-	UNUSED_PARAM(x);
-	unsigned long i;
-	unsigned long oldstart;
-	unsigned long idx,tag;
-
-	while(1){
-
-		sem_wait(&writerstartsem);
-		sem_wait(&ibsem);
-
-		oldstart = writebufferstart;
-		i = oldstart;
-		idx = writebuffer[i];
-		tag = cacheControl[idx].tag;
-		writebuffer[i] = GLOBAL_NULL;
-		if(tag != GLOBAL_NULL && idx != GLOBAL_NULL && cacheControl[idx].dirty == DIRTY){
-			mprotect((char*)startAddr+tag,CACHELINE*pagesize,PROT_READ);
-			for(i = 0; i <CACHELINE; i++){
-#ifdef NO_DIFF
-			  storepage(idx+i,tag+pagesize*i);
-#else
-			  storepageDIFF(idx+i,tag+pagesize*i);
-#endif
-
-				cacheControl[idx+i].dirty = CLEAN;
-			}
-		}
-		for(i = 0; i < (unsigned long)numtasks; i++){
-			if(barwindowsused[i] == 1){
-				MPI_Win_unlock(i, globalDataWindow[i]);
-				barwindowsused[i] = 0;
-			}
-		}
-		writebufferstart = (writebufferstart+1)%writebuffersize;
-		sem_post(&ibsem);
-		sem_post(&writerwaitsem);
-	}
-	return nullptr;
 }
 
 void * loadcacheline(void * x){
@@ -722,7 +614,7 @@ void * loadcacheline(void * x){
 				if(cacheControl[startidx].tag != GLOBAL_NULL && cacheControl[startidx].tag  != lineAddr){
 					argo_byte dirty = cacheControl[startidx].dirty;
 					if(dirty == DIRTY){
-						mprotect(tmpptr2,blocksize,PROT_READ);
+						mprotect(tmpptr2,blocksize,PROT_NONE);
 						int j;
 						for(j=0; j < CACHELINE; j++){
 #ifdef NO_DIFF
@@ -742,10 +634,7 @@ void * loadcacheline(void * x){
 
 					cacheControl[startidx].state = INVALID;
 					cacheControl[startidx].tag = lineAddr;
-
 					cacheControl[startidx].dirty=CLEAN;
-					vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_NONE);
-					mprotect(tmpptr2,blocksize,PROT_NONE);
 				}
 				pthread_mutex_unlock(&wbmutex);
 			}
@@ -804,11 +693,11 @@ void * loadcacheline(void * x){
 		MPI_Win_unlock(homenode, globalDataWindow[homenode]);
 
 		if(cacheControl[startidx].tag == GLOBAL_NULL){
-			vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ);
-			cacheControl[startidx].tag = lineAddr;
+		  vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ|PROT_WRITE); //Map to read-write permission
+		  cacheControl[startidx].tag = lineAddr;
 		}
 		else{
-			mprotect(lineptr,pagesize*CACHELINE,PROT_READ);
+		  mprotect(lineptr,pagesize*CACHELINE,PROT_READ|PROT_WRITE); //Set read-write permission
 		}
 		touchedcache[startidx] = 1;
 		cacheControl[startidx].state = VALID;
@@ -879,7 +768,7 @@ void * prefetchcacheline(void * x){
 				if(cacheControl[startidx].tag != GLOBAL_NULL && cacheControl[startidx].tag  != lineAddr){
 					argo_byte dirty = cacheControl[startidx].dirty;
 					if(dirty == DIRTY){
-						mprotect(tmpptr2,blocksize,PROT_READ);
+						mprotect(tmpptr2,blocksize,PROT_NONE);
 						int j;
 						for(j=0; j < CACHELINE; j++){
 #ifdef NO_DIFF
@@ -901,9 +790,6 @@ void * prefetchcacheline(void * x){
 					cacheControl[startidx].state = INVALID;
 					cacheControl[startidx].tag = lineAddr;
 					cacheControl[startidx].dirty=CLEAN;
-
-					vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_NONE);
-					mprotect(tmpptr2,blocksize,PROT_NONE);
 
 				}
 				pthread_mutex_unlock(&wbmutex);
@@ -959,11 +845,11 @@ void * prefetchcacheline(void * x){
 
 
 		if(cacheControl[startidx].tag == GLOBAL_NULL){
-			vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ);
+			vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ|PROT_WRITE);
 			cacheControl[startidx].tag = lineAddr;
 		}
 		else{
-			mprotect(lineptr,pagesize*CACHELINE,PROT_READ);
+			mprotect(lineptr,pagesize*CACHELINE,PROT_READ|PROT_WRITE);
 		}
 
 		touchedcache[startidx] = 1;
@@ -1235,7 +1121,6 @@ void argo_initialize(unsigned long long size){
 
 	pthread_create(&loadthread1,NULL,&loadcacheline,NULL);
 	pthread_create(&loadthread2,NULL,&prefetchcacheline,(void*)NULL);
-	pthread_create(&writethread,NULL,&writeloop,(void*)NULL);
 	argo_reset_coherence(1);
 }
 
@@ -1416,7 +1301,8 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 	unsigned long offset = getOffset(addr);
 
 	char * copy = (char *)(pagecopy + index*pagesize);
-	char * real = (char *)startAddr+addr;
+	//	char * real = (char *)startAddr+addr;
+	char * real = (char *)&cacheData[index*pagesize];
 	size_t drf_unit = sizeof(char);
 
 	if(barwindowsused[homenode] == 0){
@@ -1452,7 +1338,7 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 void storepage(unsigned long index, unsigned long addr){
 	unsigned long homenode = getHomenode(addr);
 	unsigned long offset = getOffset(addr);
-	char * real = (char *)startAddr+addr;
+	char * real = (char *)&cacheData[index*pagesize];
 	if(barwindowsused[homenode] == 0){
 		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, homenode, 0, globalDataWindow[homenode]);
 		barwindowsused[homenode] = 1;
