@@ -140,6 +140,9 @@ unsigned long GLOBAL_NULL;
 /** @brief  Statistics */
 argo_statistics stats;
 
+//use full store
+#define NO_DIFF 1 
+
 namespace {
 	/** @brief constant for invalid ArgoDSM node */
 	constexpr unsigned long invalid_node = static_cast<unsigned long>(-1);
@@ -618,9 +621,9 @@ void * loadcacheline(void * x){
 						int j;
 						for(j=0; j < CACHELINE; j++){
 #ifdef NO_DIFF
-							storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+						  storepage(startidx+j,pagesize*j+(cacheControl[startidx].tag));
 #else
-							storepage(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+						  storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
 #endif
 						}
 					}
@@ -772,9 +775,9 @@ void * prefetchcacheline(void * x){
 						int j;
 						for(j=0; j < CACHELINE; j++){
 #ifdef NO_DIFF
-							storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
-#else
 							storepage(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+#else
+							storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
 #endif
 						}
 					}
@@ -1293,7 +1296,7 @@ void clearStatistics(){
 	stats.barriers = 0;
 	stats.locks = 0;
 }
-#ifndef NO_DIFF
+
 void storepageDIFF(unsigned long index, unsigned long addr){
 	unsigned int i,j;
 	int cnt = 0;
@@ -1333,7 +1336,7 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 	}
 	stats.stores++;
 }
-#endif
+
 
 void storepage(unsigned long index, unsigned long addr){
 	unsigned long homenode = getHomenode(addr);

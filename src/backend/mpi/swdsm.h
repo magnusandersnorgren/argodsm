@@ -52,7 +52,6 @@
 #endif
 
 
-
 /** @brief Read a value and always get the latest - 'Read-Through' */
 #ifdef __cplusplus
 #define ACCESS_ONCE(x) (*static_cast<std::remove_reference<decltype(x)>::type volatile *>(&(x)))
