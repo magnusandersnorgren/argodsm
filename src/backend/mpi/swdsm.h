@@ -197,6 +197,13 @@ void flushWriteBuffer(void);
 void addToWriteBuffer(unsigned long cacheIndex);
 
 /**
+ * @brief stores a page remotely - writing back full page independently if it was changed or not
+ * @param index index in local page cache
+ * @param addr address to page in global address space
+ */
+void storepage(unsigned long index, unsigned long addr);
+
+/**
  * @brief stores a page remotely - only writing back what has been written locally since last synchronization point
  * @param index index in local page cache
  * @param addr address to page in global address space

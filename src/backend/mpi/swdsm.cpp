@@ -171,7 +171,11 @@ void flushWriteBuffer(void){
 				mprotect(lineptr, pagesize*CACHELINE, PROT_READ);
 				cacheControl[i].dirty=CLEAN;
 				for(j=0; j < CACHELINE; j++){
-					storepageDIFF(i+j,pagesize*j+lineAddr);
+#ifdef NO_DIFF
+				  storepage(i+j,pagesize*j+lineAddr);
+#else
+				  storepageDIFF(i+j,pagesize*j+lineAddr);
+#endif
 				}
 			}
     }
@@ -587,9 +591,11 @@ void handler(int sig, siginfo_t *si, void *unused){
 		}
 	}
 	sem_post(&ibsem);
+#ifndef NO_DIFF
 	unsigned char * real = (unsigned char *)(localAlignedAddr);
 	unsigned char * copy = (unsigned char *)(pagecopy + line*pagesize);
 	memcpy(copy,real,CACHELINE*pagesize);
+#endif
 	addToWriteBuffer(startIndex);
 	mprotect(localAlignedAddr, pagesize*CACHELINE,PROT_WRITE|PROT_READ);
 	pthread_mutex_unlock(&cachemutex);
@@ -635,7 +641,12 @@ void *writeloop(void * x){
 		if(tag != GLOBAL_NULL && idx != GLOBAL_NULL && cacheControl[idx].dirty == DIRTY){
 			mprotect((char*)startAddr+tag,CACHELINE*pagesize,PROT_READ);
 			for(i = 0; i <CACHELINE; i++){
-				storepageDIFF(idx+i,tag+pagesize*i);
+#ifdef NO_DIFF
+			  storepage(idx+i,tag+pagesize*i);
+#else
+			  storepageDIFF(idx+i,tag+pagesize*i);
+#endif
+
 				cacheControl[idx+i].dirty = CLEAN;
 			}
 		}
@@ -714,7 +725,11 @@ void * loadcacheline(void * x){
 						mprotect(tmpptr2,blocksize,PROT_READ);
 						int j;
 						for(j=0; j < CACHELINE; j++){
+#ifdef NO_DIFF
 							storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+#else
+							storepage(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+#endif
 						}
 					}
 
@@ -867,7 +882,11 @@ void * prefetchcacheline(void * x){
 						mprotect(tmpptr2,blocksize,PROT_READ);
 						int j;
 						for(j=0; j < CACHELINE; j++){
+#ifdef NO_DIFF
 							storepageDIFF(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+#else
+							storepage(startidx+j,pagesize*j+(cacheControl[startidx].tag));
+#endif
 						}
 					}
 
@@ -1147,7 +1166,9 @@ void argo_initialize(unsigned long long size){
 	}
 
 	lockbuffer = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, pagesize));
+#ifndef NO_DIFF
 	pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
+#endif
 	globalSharers = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, gwritersize));
 
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
@@ -1199,7 +1220,6 @@ void argo_initialize(unsigned long long size){
 								 MPI_INFO_NULL, MPI_COMM_WORLD, &sharerWindow);
 	MPI_Win_create(lockbuffer, pagesize, 1, MPI_INFO_NULL, MPI_COMM_WORLD, &lockWindow);
 
-	memset(pagecopy, 0, cachesize*pagesize);
 	memset(touchedcache, 0, cachesize);
 	memset(globalData, 0, size_of_chunk*sizeof(argo_byte));
 	memset(cacheData, 0, cachesize*pagesize);
@@ -1388,7 +1408,7 @@ void clearStatistics(){
 	stats.barriers = 0;
 	stats.locks = 0;
 }
-
+#ifndef NO_DIFF
 void storepageDIFF(unsigned long index, unsigned long addr){
 	unsigned int i,j;
 	int cnt = 0;
@@ -1427,6 +1447,20 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 	}
 	stats.stores++;
 }
+#endif
+
+void storepage(unsigned long index, unsigned long addr){
+	unsigned long homenode = getHomenode(addr);
+	unsigned long offset = getOffset(addr);
+	char * real = (char *)startAddr+addr;
+	if(barwindowsused[homenode] == 0){
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, homenode, 0, globalDataWindow[homenode]);
+		barwindowsused[homenode] = 1;
+	}
+	MPI_Put(&real, pagesize, MPI_BYTE, homenode, offset, pagesize, MPI_BYTE, globalDataWindow[homenode]);
+	stats.stores++;
+}
+
 
 void printStatistics(){
 	printf("#####################STATISTICS#########################\n");
