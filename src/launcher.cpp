@@ -139,7 +139,7 @@ static void launcher_init() {
 	bool was_argo_code = is_argo_code;
 	is_argo_code = true;
 	argo::init(80l*1024l*1024l*1024l); // TODO make this runtime choosable
-	char* block = argo::new_array<char>(10l*1024l*1024l*1024l);
+	//char* block = argo::new_array<char>(10l*1024l*1024l*1024l);
 	//argo_alive = argo::conew_<bool>(true);
 	//printf("mempool sanity: %p -> %p\n", default_global_mempool, default_global_mempool->memory);
 	std::cout << "inited argo" << std::endl;
