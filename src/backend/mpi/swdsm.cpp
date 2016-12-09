@@ -589,7 +589,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 	sem_post(&ibsem);
 	unsigned char * real = (unsigned char *)(localAlignedAddr);
 	unsigned char * copy = (unsigned char *)(pagecopy + line*pagesize);
-	memcpy(copy,real,CACHELINE*pagesize);
+	//memcpy(copy,real,CACHELINE*pagesize);
 	addToWriteBuffer(startIndex);
 	mprotect(localAlignedAddr, pagesize*CACHELINE,PROT_WRITE|PROT_READ);
 	pthread_mutex_unlock(&cachemutex);
@@ -1138,7 +1138,7 @@ void argo_initialize(unsigned long long size){
 	}
 
 	lockbuffer = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, pagesize));
-	pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
+	//pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
 	globalSharers = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, gwritersize));
 
 	printf("TRACE 2\n");
