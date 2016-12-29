@@ -206,6 +206,10 @@ namespace argo {
 				 * @return The pointer to the allocated memory
 				 */
 				T* allocate(size_t n, size_t alignment=32) {
+					/* brutally round up n to alignment */
+					size_t rem = n % alignment;
+					if(rem)
+						n = n + alignment - rem;
 					/** @todo maybe detect uninitialized mempool in here? */
 
 					lock->lock();

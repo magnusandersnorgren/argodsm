@@ -160,6 +160,7 @@ unsigned long isPowerOf2(unsigned long x){
 }
 
 void flushWriteBuffer(void){
+	return;
 	unsigned long i,j;
 	double t1,t2;
 
@@ -1257,6 +1258,7 @@ void argo_finalize(){
 }
 
 void self_invalidation(){
+	return;
 	unsigned long i;
 	double t1,t2;
 	int flushed = 0;

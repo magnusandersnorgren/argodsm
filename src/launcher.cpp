@@ -90,6 +90,9 @@ typedef memory_pool<8096> static_mp;
 
 //using capture_allocator_t = aa::generic_allocator<char, memory_pool<16*4096>, aa::null_lock>;
 
+extern "C" {
+	void* dyn_alloc(size_t size);
+}
 
 extern argo::mempools::global_memory_pool<>* default_global_mempool;
 static void capture_reset() {
@@ -237,14 +240,14 @@ class real_fn<void, Ps...> {
 };
 
 void* argo_launcher_calloc(size_t nmemb, size_t size) {
-	void* nptr = dynamic_alloc(nmemb*size);
+	void* nptr = dyn_alloc(nmemb*size);
 	//std::fill(static_cast<char*>(nptr), static_cast<char*>(nptr)+(nmemb*size)+1, 0);
 	std::fill(static_cast<char*>(nptr), static_cast<char*>(nptr)+(nmemb*size), 0);
 	return nptr;
 }
 
 void* argo_launcher_realloc(void* ptr, size_t size) {
-	void* nptr = dynamic_alloc(size);
+	void* nptr = dyn_alloc(size);
 	if(ptr == nullptr) return nptr;
 	size_t oldsize = aa::default_dynamic_allocator.allocated_space(static_cast<char*>(ptr));
 	size_t cpsize = (oldsize<size)?oldsize:size;
@@ -272,7 +275,7 @@ void* argo_launcher_mmap(void* addr, size_t length, int prot, int flags, int fd,
 int argo_launcher_munmap(void* addr, size_t length) {
 	(void)length;
 	(void)addr;
-	//dynamic_free(addr);
+	dynamic_free(addr);
 	return 0;
 }
 
@@ -303,7 +306,7 @@ ssize_t argo_launcher_read(int fd, void *buf, size_t count) {
 		is_argo_code = was;
 		return r;
 	}
-	static const int bufsize = 16384;
+	static const int bufsize = 16*16384;
 	static thread_local char lbuf[bufsize];
 	auto toread = bufsize<count?bufsize:count;
 	auto r = read(fd, lbuf, toread);
@@ -351,7 +354,7 @@ void* argo_launcher_thread_launcher(void* a) {
 extern struct sigaction old_struct_sigaction;
 extern "C" {
 	void* dyn_alloc(size_t size) {
-		return dynamic_alloc(size, 32);
+		return dynamic_alloc(size, 256);
 	}
 	void* malloc(size_t size) {
 		if(is_capturing) {
@@ -508,7 +511,7 @@ extern "C" {
 			return r;
 		}
 		//printf("argo-buf -> processing\n");
-		static const int bufsize = 16384;
+		static const int bufsize = 16*16384;
 		static thread_local char lbuf[bufsize];
 		auto toread = (bufsize<count)?bufsize:count;
 		//printf("argo-buf -> reading up to %ld\n", toread);
@@ -604,7 +607,7 @@ extern "C" {
 			is_argo_code = was;
 			return r;
 		}
-		static const int bufsize = 16384;
+		static const int bufsize = 16*16384;
 		static thread_local char lbuf[bufsize];
 		auto towrite = (bufsize<count)?bufsize:count;
 		auto rbuf = static_cast<char*>(const_cast<void*>(buf));
@@ -631,7 +634,7 @@ extern "C" {
 			return r;
 		}
 		//printf("argo-buf -> fprocessing sz %ld\n", size);
-		static const int bufsize = 16384;
+		static const int bufsize = 16*16384;
 		static thread_local char lbuf[bufsize];
 		auto towrite = (bufsize<(size*nmemb))?(bufsize/size):nmemb;
 		auto rbuf = static_cast<char*>(const_cast<void*>(ptr));

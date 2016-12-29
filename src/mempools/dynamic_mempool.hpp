@@ -132,7 +132,8 @@ namespace argo {
 					//if(!memory) grow(size);
 					//if(!memory || size > 10446744073709550848ul) raise(SIGUSR2);
 					//printf("checking %lu=%lu+%lu > %lu? ERROR: %d\n", offset+size, offset, size, max_size, (offset+size>max_size)); 
-					offset = ((offset+4095)/4096)*4096;
+					//offset = ((offset+4095)/4096)*4096;
+					//offset = ((offset+127)/128)*128;
 					offset = ((offset+alignment-1)/alignment)*alignment;
 					if(offset+size > max_size) {
 						throw bad_alloc();
