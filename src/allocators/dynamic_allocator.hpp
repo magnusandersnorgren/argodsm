@@ -238,7 +238,7 @@ namespace argo {
 			initialize = false;
 		}
 
-		void* ptr = dynamic_alloc(sizeof(T));
+		void* ptr = dynamic_alloc(sizeof(T),8);
 		if (initialize) {
 			new (ptr) T(std::forward<Ps>(ps)...);
 		}
@@ -314,7 +314,7 @@ namespace argo {
 			initialize = false;
 		}
 
-		void* ptr = dynamic_alloc(sizeof(T) * size);
+		void* ptr = dynamic_alloc(sizeof(T) * size,8);
 		if (initialize) {
 			new (ptr) T[size]();
 		}

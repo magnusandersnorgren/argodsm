@@ -32,7 +32,20 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include_directories("${PROJECT_SOURCE_DIR}/src")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/include")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/src/")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/src/core")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/src/core/perfmodel")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/src/common")
+include_directories("/home/mano9519/projfolder/starpu-1.1.7/src/sched_policies")
+
+#include_directories("/home/mano9519/projfolder/fxt")
+#include_directories("/home/mano9519/projfolder/fxt/build")
+#include_directories("/home/mano9519/projfolder/fxt/build/include")
+#include_directories("/home/mano9519/projfolder/fxt/build/lib")
+
 add_subdirectory(src)
+
 
 option(ARGO_TESTS
 	"Build tests for ArgoDSM" ON)

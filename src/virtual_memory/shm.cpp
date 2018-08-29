@@ -21,20 +21,20 @@
 namespace {
 	/* file constants */
 	/** @todo hardcoded start address */
-	const char* ARGO_START = (char*) 0x200000000000l;
+	const char* ARGO_START = (char*) 0x300000000000l;
 	/** @todo hardcoded end address */
-	const char* ARGO_END   = (char*) 0x600000000000l;
+	const char* ARGO_END   = (char*) 0x700000000000l;
 	/** @todo hardcoded size */
 	const ptrdiff_t ARGO_SIZE = ARGO_END - ARGO_START;
 	/** @todo hardcoded maximum size */
 	const ptrdiff_t ARGO_SIZE_LIMIT = 0x80000000000l;
 
 	/** @brief error message string */
-	const std::string msg_alloc_fail = "ArgoDSM could not allocate mappable memory";
+	const std::string msg_alloc_fail = "SHM - ArgoDSM could not allocate mappable memory";
 	/** @brief error message string */
-	const std::string msg_mmap_fail = "ArgoDSM failed to map in virtual address space.";
+	const std::string msg_mmap_fail = "SHM - ArgoDSM failed to map in VA space.";
 	/** @brief error message string */
-	const std::string msg_main_mmap_fail = "ArgoDSM failed to set up virtual memory. Please report a bug.";
+	const std::string msg_main_mmap_fail = "SHM -ArgoDSM failed to set up virtual memory. Please report a bug.";
 
 	/* file variables */
 	/** @brief a file descriptor for backing the virtual address space used by ArgoDSM */
@@ -97,13 +97,17 @@ namespace argo {
 			}
 			return p;
 		}
-
+	  
 		void map_memory(void* addr, std::size_t size, std::size_t offset, int prot) {
 			auto p = ::mmap(addr, size, prot, MAP_SHARED|MAP_FIXED, fd, offset);
+#ifdef DEBUG
+				  std::cerr << msg_mmap_fail << "MAP_MEMORY start addr:" << start_addr << " addr:" << addr << " diff" << ((char *)addr - (char*)start_addr) << " size:" << size << " offset" << offset << " prot" << prot << std::endl;
+#endif
 			if(p == MAP_FAILED) {
-				std::cerr << msg_mmap_fail << std::endl;
-				throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_mmap_fail);
-				exit(EXIT_FAILURE);
+			  std::cerr << msg_mmap_fail << "ERROR start addr:" << start_addr << " addr:" << addr << " diff" << ((char *)addr - (char*)start_addr) << " size:" << size << " offset" << offset << " prot" << prot << " errno" << errno << std::endl;
+
+			  throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_mmap_fail);
+			  exit(EXIT_FAILURE);
 			}
 		}
 	} // namespace virtual_memory

@@ -19,29 +19,33 @@
 namespace {
 	/* file constants */
 	/** @todo hardcoded start address */
-	const char* ARGO_START = (char*) 0x200000000000l;
+	const char* ARGO_START = (char*) 0x30000000000UL;
 	/** @todo hardcoded end address */
-	const char* ARGO_END   = (char*) 0x600000000000l;
+	const char* ARGO_END   = (char*) 0x50000000000UL;
 	/** @todo hardcoded size */
 	const ptrdiff_t ARGO_SIZE = ARGO_END - ARGO_START;
 
 	/** @brief error message string */
-	const std::string msg_alloc_fail = "ArgoDSM could not allocate mappable memory";
+	const std::string msg_alloc_fail = "MEMFD - ArgoDSM could not allocate mappable memory";
 	/** @brief error message string */
-	const std::string msg_mmap_fail = "ArgoDSM failed to map in virtual address space.";
+	const std::string msg_mmap_fail = "MEMFD - ArgoDSM failed to map in virtual address space.";
 	/** @brief error message string */
-	const std::string msg_main_mmap_fail = "ArgoDSM failed to set up virtual memory. Please report a bug.";
+	const std::string msg_main_mmap_fail = "MEMFD - ArgoDSM failed to set up virtual memory. Please report a bug.";
 
 	/* file variables */
 	/** @brief a file descriptor for backing the virtual address space used by ArgoDSM */
 	int fd;
 	/** @brief the address at which the virtual address space used by ArgoDSM starts */
 	void* start_addr;
+	void* shadow_addr;
 }
 
 namespace argo {
 	namespace virtual_memory {
 		void init() {
+#ifdef DEBUG
+			printf("init memfd start\n");
+#endif
 			fd = syscall(__NR_memfd_create,"argocache", 0);
 			if(ftruncate(fd, ARGO_SIZE)) {
 				std::cerr << msg_main_mmap_fail << std::endl;
@@ -49,43 +53,55 @@ namespace argo {
 				throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_main_mmap_fail);
 				exit(EXIT_FAILURE);
 			}
-			/** @todo check desired range is free */
-			constexpr int flags = MAP_ANONYMOUS|MAP_SHARED|MAP_FIXED;
-			start_addr = ::mmap((void*)ARGO_START, ARGO_SIZE, PROT_NONE, flags, -1, 0);
-			if(start_addr == MAP_FAILED) {
-				std::cerr << msg_main_mmap_fail << std::endl;
-				/** @todo do something? */
-				throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_main_mmap_fail);
-				exit(EXIT_FAILURE);
-			}
+			// /** @todo check desired range is free */
+			 int flags = MAP_ANONYMOUS|MAP_SHARED|MAP_FIXED|MAP_NORESERVE;
+			 start_addr = ::mmap((void*)ARGO_START, ARGO_SIZE, PROT_READ|PROT_WRITE, flags, -1, 0);
+			 if(start_addr == MAP_FAILED) {
+			 	std::cerr << msg_main_mmap_fail << std::endl;
+			 	/** @todo do something? */
+			 	throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_main_mmap_fail);
+			 	exit(EXIT_FAILURE);
+			 }
+#ifdef DEBUG
+			printf("init memfd done\n");
+#endif
 		}
 
 		void* start_address() {
 			return start_addr;
 		}
-
-		std::size_t size() {
-			return ARGO_SIZE/2;
+		void* shadow_address() {
+			return shadow_addr;
 		}
 
-		void* allocate_mappable(std::size_t alignment, std::size_t size) {
+		unsigned long size() {
+			return ARGO_SIZE;
+		}
+
+		void* allocate_mappable(unsigned long alignment, unsigned long size) {
 			void* p;
-			auto r = posix_memalign(&p, alignment, size);
-			if(r || p == nullptr) {
-				std::cerr << msg_alloc_fail << std::endl;
-				throw std::system_error(std::make_error_code(static_cast<std::errc>(r)), msg_alloc_fail);
-				return nullptr;
+			int flags = MAP_ANONYMOUS|MAP_SHARED|MAP_NORESERVE;
+			p = ::mmap(NULL, size, PROT_READ|PROT_WRITE, flags, -1, 0);
+			if(p == MAP_FAILED) {
+			 	std::cerr << msg_main_mmap_fail << std::endl;
+			 	/** @todo do something? */
+			 	throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_main_mmap_fail);
+			 	exit(EXIT_FAILURE);
 			}
+			printf("alloc mappable DONE size:%ld\n",size);
 			return p;
 		}
-
-		void map_memory(void* addr, std::size_t size, std::size_t offset, int prot) {
-			auto p = ::mmap(addr, size, prot, MAP_SHARED|MAP_FIXED, fd, offset);
-			if(p == MAP_FAILED) {
-				std::cerr << msg_mmap_fail << std::endl;
-				throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_mmap_fail);
-				exit(EXIT_FAILURE);
-			}
+		unsigned long mapctr = 0;
+		void map_memory(void* addr, unsigned long size, unsigned long offset, int prot) {
+		  void* p = ::mmap(addr, size, prot, MAP_SHARED|MAP_FIXED, fd, offset);
+#ifdef DEBUG
+		printf("map memory ctr:%ld addr %ld, size:%ld, offset:%ld, prot:%d\n",mapctr++,addr,size,offset,prot);
+#endif
+		  if(p == MAP_FAILED) {
+		    std::cerr << msg_mmap_fail << " errno " << errno <<  std::endl;
+		    throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_mmap_fail);
+		    exit(EXIT_FAILURE);
+		  }
 		}
 	} // namespace virtual_memory
 } // namespace argo

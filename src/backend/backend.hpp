@@ -94,6 +94,12 @@ namespace argo {
 		 */
 		void barrier(std::size_t threadcount=1);
 
+		void clear_state();
+		float is_cached(void* ptr, size_t size);
+		int in_cache(void* ptr, size_t size);
+		double get_taskavg();
+		double get_signalavg();
+		int get_sched_policy();
 		/**
 		 * @brief broadcast-style collective synchronization
 		 * @tparam T type of synchronized object

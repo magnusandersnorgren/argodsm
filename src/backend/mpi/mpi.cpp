@@ -18,23 +18,21 @@
  * @see swdsm.h
  * @see swdsm.cpp
  */
-extern MPI_Comm workcomm;
+
 /**
  * @todo MPI communication channel for exclusive accesses
  * @deprecated prototype implementation detail
  * @see swdsm.h
  * @see swdsm.cpp
  */
-extern MPI_Win  *globalDataWindow;
+extern MPI_Win *global_address_window;
 
 /**
  * @todo should be changed to qd-locking (but need to be replaced in the other files as well)
  *       or removed when infiniband/the mpi implementations allows for multithreaded accesses to the interconnect
  * @deprecated prototype implementation detail
  */
-#include <semaphore.h>
-extern sem_t ibsem;
-
+extern pthread_mutex_t window_mutex;
 extern bool swdsm_is_loaded;
 static bool mpib_is_loaded = false;
 static void mpib_loaded()  __attribute__((constructor));
@@ -166,14 +164,28 @@ namespace argo {
 		void barrier(std::size_t tc) {
 			swdsm_argo_barrier(tc);
 		}
-
-		template<typename T>
-		void broadcast(node_id_t source, T* ptr) {
-			sem_wait(&ibsem);
-			MPI_Bcast(static_cast<void*>(ptr), sizeof(T), MPI_BYTE, source, workcomm);
-			sem_post(&ibsem);
+		void clear_state(){
+			return argo_clear_state();
 		}
 
+		int in_cache(void* ptr, size_t size){
+			return argo_in_cache(ptr,size);
+		}
+		int get_sched_policy(){
+			return argo_get_sched_policy();
+		}
+		double get_taskavg(){
+			return argo_get_taskavg();
+		}
+		double get_signalavg(){
+			return argo_get_signalavg();
+		}
+		template<typename T>
+		void broadcast(node_id_t source, T* ptr) {
+			pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
+			MPI_Bcast(static_cast<void*>(ptr), sizeof(T), MPI_BYTE, source, MPI_COMM_WORLD);
+			pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
+		}
 		void acquire() {
 			argo_acquire();
 			std::atomic_thread_fence(std::memory_order_acquire);
@@ -184,53 +196,56 @@ namespace argo {
 		}
 
 #include "../explicit_instantiations.inc.cpp"
-
 		namespace atomic {
 			void _exchange(global_ptr<void> obj, void* desired,
 					std::size_t size, void* output_buffer) {
-				sem_wait(&ibsem);
+				pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
 				MPI_Datatype t_type = fitting_mpi_int(size);
 				// Perform the exchange operation
-				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-				MPI_Fetch_and_op(desired, output_buffer, t_type, obj.node(), obj.offset(), MPI_REPLACE, globalDataWindow[0]);
-				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				//				printf("atomic exc:%d\n", obj.node());
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, global_address_window[0]);
+				MPI_Fetch_and_op(desired, output_buffer, t_type, obj.node(), obj.offset(), MPI_REPLACE, global_address_window[0]);
+				MPI_Win_unlock(obj.node(), global_address_window[0]);
 				// Cleanup
-				sem_post(&ibsem);
+				pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
 			}
 
 			void _store(global_ptr<void> obj, void* desired, std::size_t size) {
-				sem_wait(&ibsem);
+				pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
 				MPI_Datatype t_type = fitting_mpi_int(size);
 				// Perform the store operation
-				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-				MPI_Put(desired, 1, t_type, obj.node(), obj.offset(), 1, t_type, globalDataWindow[0]);
-				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				//				printf("atomic str\n");
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, global_address_window[0]);
+				MPI_Put(desired, 1, t_type, obj.node(), obj.offset(), 1, t_type, global_address_window[0]);
+				MPI_Win_unlock(obj.node(), global_address_window[0]);
 				// Cleanup
-				sem_post(&ibsem);
+				pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
 			}
 
 			void _load(global_ptr<void> obj, std::size_t size,
 					void* output_buffer) {
-				sem_wait(&ibsem);
+				pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
 				MPI_Datatype t_type = fitting_mpi_int(size);
 				// Perform the store operation
-				MPI_Win_lock(MPI_LOCK_SHARED, obj.node(), 0, globalDataWindow[0]);
-				MPI_Get(output_buffer, 1, t_type, obj.node(), obj.offset(), 1, t_type, globalDataWindow[0]);
-				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				//printf("atomic ld\n");
+				MPI_Win_lock(MPI_LOCK_SHARED, obj.node(), 0, global_address_window[0]);
+				MPI_Get(output_buffer, 1, t_type, obj.node(), obj.offset(), 1, t_type, global_address_window[0]);
+				MPI_Win_unlock(obj.node(), global_address_window[0]);
 				// Cleanup
-				sem_post(&ibsem);
+				pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
 			}
 
 			void _compare_exchange(global_ptr<void> obj, void* desired,
 					std::size_t size, void* expected, void* output_buffer) {
-				sem_wait(&ibsem);
+				pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
 				MPI_Datatype t_type = fitting_mpi_int(size);
 				// Perform the store operation
-				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-				MPI_Compare_and_swap(desired, expected, output_buffer, t_type, obj.node(), obj.offset(), globalDataWindow[0]);
-				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				//printf("atomic compexc\n");
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, global_address_window[0]);
+				MPI_Compare_and_swap(desired, expected, output_buffer, t_type, obj.node(), obj.offset(), global_address_window[0]);
+				MPI_Win_unlock(obj.node(), global_address_window[0]);
 				// Cleanup
-				sem_post(&ibsem);
+				pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
 			}
 
 			/**
@@ -248,13 +263,14 @@ namespace argo {
 			 */
 			void _fetch_add(global_ptr<void> obj, void* value,
 					MPI_Datatype t_type, void* output_buffer) {
-				sem_wait(&ibsem);
+				pthread_mutex_lock(&window_mutex);//sem_wait(&ibsem);
 				// Perform the exchange operation
-				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-				MPI_Fetch_and_op(value, output_buffer, t_type, obj.node(), obj.offset(), MPI_SUM, globalDataWindow[0]);
-				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				//printf("atomic fadd\n");
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, global_address_window[0]);
+				MPI_Fetch_and_op(value, output_buffer, t_type, obj.node(), obj.offset(), MPI_SUM, global_address_window[0]);
+				MPI_Win_unlock(obj.node(), global_address_window[0]);
 				// Cleanup
-				sem_post(&ibsem);
+				pthread_mutex_unlock(&window_mutex); //sem_post(&ibsem);
 			}
 
 			void _fetch_add_int(global_ptr<void> obj, void* value,

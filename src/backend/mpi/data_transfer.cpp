@@ -355,7 +355,17 @@ void load_line(unsigned long cacheindex, unsigned long local_offset, unsigned lo
 					global_address_window[homenode]);
 
 	//Set cache tag and dirty bit (For scaling memory we can set this to dirty immediately and later on map it with RW access rights. May want to update sharing here
+#ifdef ALWAYS_WRITABLE
+	cachecontrol[cacheindex].dirty = DIRTY;
+#ifdef ARGO_DIFF
+	//Make sure diffs are copied immediately if we want them
+	unsigned char * real = (unsigned char *)(global_line_addr);
+	unsigned char * copy = (unsigned char *)(pagecopy + index*pagesize*pageline);
+	memcpy(copy,real,pageline*pagesize);
+#endif 
+#else
 	cachecontrol[cacheindex].dirty = CLEAN;
+#endif
 	cachecontrol[cacheindex].tag = local_offset;
 
 #ifdef CACHE_TRACE
@@ -382,7 +392,19 @@ void prefetch_line(unsigned long cacheindex, unsigned long local_offset, unsigne
 					MPI_BYTE,
 					parallel_global_address_window[homenode]);
 	//Set cache tag and dirty bit (For scaling memory we can set this to dirty immediately and later on map it with RW access rights. May want to update sharing here
+#ifdef ALWAYS_WRITABLE
+	cachecontrol[cacheindex].dirty = DIRTY;
+
+#ifdef ARGO_DIFF
+	//Make sure diffs are copied immediately if we want them
+	unsigned char * real = (unsigned char *)(global_line_addr);
+	unsigned char * copy = (unsigned char *)(pagecopy + index*pagesize*pageline);
+	memcpy(copy,real,pageline*pagesize);
+#endif 
+
+#else
 	cachecontrol[cacheindex].dirty = CLEAN;
+#endif
 	cachecontrol[cacheindex].tag = local_offset;
 
 #ifdef CACHE_TRACE

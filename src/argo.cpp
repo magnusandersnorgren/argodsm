@@ -35,19 +35,30 @@ namespace argo {
 		printf("argo global mempool @ %p\n", default_global_mempool);
 		argo_reset();
 	}
-
 	void finalize() {
 		delete default_global_mempool;
 	}
-
 	int node_id() {
 		return static_cast<int>(argo::backend::node_id());
 	}
-
 	int number_of_nodes() {
 		return static_cast<int>(argo::backend::number_of_nodes());
 	}
-
+	void clear_state(){
+		argo::backend::clear_state();
+	}
+	int in_cache(void* ptr, size_t size){
+		return argo::backend::in_cache(ptr,size);
+	}
+	double get_taskavg(){
+		return argo::backend::get_taskavg();
+	}
+	int get_sched_policy(){
+		return argo::backend::get_sched_policy();
+	}
+	double get_signalavg(){
+		return argo::backend::get_signalavg();
+	}
 } // namespace argo
 
 extern "C" {
@@ -56,7 +67,7 @@ extern "C" {
 	}
 
 	void argo_finalize() {
-		argo::finalize();
+	  argo::finalize();
 	}
 
 	void argo_reset() {
@@ -80,12 +91,26 @@ extern "C" {
 	int argo_number_of_nodes() {
 		return argo::number_of_nodes();
 	}
-
-	bool argo_is_ready() {
+  int argo_is_ready() {
 		//auto handle = dlopen("libnuma.so", RTLD_NOW|RTLD_GLOBAL);
 		//handle = dlopen("libpthread.so.0", RTLD_NOW|RTLD_GLOBAL);
 		//handle = dlopen("/sw/parallel/openmpi/tintin-sl6/1.8.5gcc5.1.0/lib/libopen-rte.so.7", RTLD_NOW|RTLD_GLOBAL);
 		//(void)handle;
 		return argo_is_loaded && argo_allocators_is_ready() && argo::backend::is_loaded();
+	}
+	int argo_in_cache(void* ptr, size_t size){
+		return argo::in_cache(ptr,size);
+	}
+	void argo_clear_state(){
+		return argo::clear_state();
+	}
+	double argo_get_taskavg(){
+		return argo::get_taskavg();
+	}
+	int argo_get_sched_policy(){
+		return argo::get_sched_policy();
+	}
+	double argo_get_signalavg(){
+		return argo::get_signalavg();
 	}
 }

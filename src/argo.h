@@ -41,6 +41,10 @@ int  argo_node_id();
  */
 int  argo_number_of_nodes();
 
-bool argo_is_ready();
-
+int argo_is_ready();
+int argo_get_sched_policy();
+double argo_get_taskavg();
+double argo_get_signalavg();
+int argo_in_cache(void* ptr, size_t size);
+void argo_clear_state();
 #endif /* argo_argo_h */

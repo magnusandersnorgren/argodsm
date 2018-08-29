@@ -25,13 +25,13 @@ namespace {
 	const ptrdiff_t ARGO_SIZE = 0x80000000000l;
 
 	/** @brief error message string */
-	const std::string msg_insufficient_memory = "ArgoDSM anonymous mappable memory is insufficient.";
+	const std::string msg_insufficient_memory = "anon - ArgoDSM anonymous mappable memory is insufficient.";
 	/** @brief error message string */
-	const std::string msg_mprotect_fail = "ArgoDSM could not mprotect anonymous mapping";
+	const std::string msg_mprotect_fail = "anon - ArgoDSM could not mprotect anonymous mapping";
 	/** @brief error message string */
-	const std::string msg_invalid_remap = "ArgoDSM encountered an invalid mapping attempt in virtual address space";
+	const std::string msg_invalid_remap = "anon - ArgoDSM encountered an invalid mapping attempt in virtual address space";
 	/** @brief error message string */
-	const std::string msg_main_mmap_fail = "ArgoDSM failed to set up virtual memory. Please report a bug.";
+	const std::string msg_main_mmap_fail = "anon -ArgoDSM failed to set up virtual memory. Please report a bug.";
 
 	/* file variables */
 	/** @brief the address at which the backing storage space starts */
@@ -94,7 +94,7 @@ namespace argo {
 		}
 
 		void map_memory(void* addr, std::size_t size, std::size_t offset, int prot) {
-			/**@todo move pagesize 4096 to hw module */
+			/**@todo move pagesize 4096 to hw module, also make it a caccheline?*/
 			int err = remap_file_pages(addr, size, 0, (file_offset + offset)/4096, 0);
 			if(err) {
 				std::cerr << msg_invalid_remap << std::endl;

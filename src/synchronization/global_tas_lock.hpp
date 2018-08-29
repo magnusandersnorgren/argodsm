@@ -37,10 +37,10 @@ namespace argo {
 				 * @brief construct global tas lock from existing flag in global address space
 				 * @param f pointer to global flag
 				 */
-				global_tas_lock(bool* f) : flag(global_flag(f)) {
-					*flag = unlocked;
-				};
-
+		  global_tas_lock(bool* f) : flag(global_flag(f)) {
+		    *flag = unlocked;
+		  };
+		  
 				/**
 				 * @brief try to lock
 				 * @return true if lock was successfully taken,
@@ -64,13 +64,12 @@ namespace argo {
 					backend::release();
 					backend::atomic::store(flag, unlocked);
 				}
-
 				/**
 				 * @brief take the lock
 				 */
 				void lock() {
-					while(!try_lock())
-						std::this_thread::yield();
+				  while(!try_lock())
+				    std::this_thread::yield();
 				}
 		};
 	} // namespace globallock

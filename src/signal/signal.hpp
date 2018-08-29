@@ -49,7 +49,7 @@ namespace argo {
 				static void install_argo_handler(const handler_ftype h) {
 					argo_handler = h;
 					sig_handler s;
-					s.sa_flags = SA_SIGINFO;
+					s.sa_flags = SA_SIGINFO|SA_NODEFER;
 					s.sa_sigaction = argo_signal_handler;
 					sigaction(SIGNAL, &s, &application_handler);
 				}

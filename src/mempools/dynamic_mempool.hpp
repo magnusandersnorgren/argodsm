@@ -69,6 +69,7 @@ namespace argo {
 		template<>
 		inline void synchronize<ALWAYS>(memory_t* const m) {
 			if(*m == nullptr) {
+			  printf("in synchronize always\n");
 				throw std::bad_alloc();
 			}
 
@@ -94,7 +95,7 @@ namespace argo {
 		/**
 		 * @brief Dynamically growing memory pool
 		 */
-		template<template<class> class Allocator, growth_mode_t growth_mode, std::size_t chunk_size=4096>
+		template<template<class> class Allocator, growth_mode_t growth_mode, std::size_t chunk_size=128*1024*1024>
 		class dynamic_memory_pool {
 			private:
 				/**  @brief typedef for byte-size allocator */
@@ -107,10 +108,10 @@ namespace argo {
 				memory_t memory;
 
 				/** @brief current size of the memory pool */
-				std::size_t max_size;
+				unsigned long max_size;
 
 				/** @brief amount of memory in pool that is already allocated */
-				std::size_t offset;
+				unsigned long offset;
 			public:
 				/** type of allocation failures within this memory pool */
 				using bad_alloc = std::bad_alloc;
@@ -128,12 +129,7 @@ namespace argo {
 				 * @return The pointer to the first byte of the newly reserved memory area
 				 * @todo move size check to separate function?
 				 */
-				char* reserve(std::size_t size, std::size_t alignment=32) {
-					//if(!memory) grow(size);
-					//if(!memory || size > 10446744073709550848ul) raise(SIGUSR2);
-					//printf("checking %lu=%lu+%lu > %lu? ERROR: %d\n", offset+size, offset, size, max_size, (offset+size>max_size)); 
-					//offset = ((offset+4095)/4096)*4096;
-					//offset = ((offset+127)/128)*128;
+				char* reserve(unsigned long size, std::size_t alignment=32) {
 					offset = ((offset+alignment-1)/alignment)*alignment;
 					if(offset+size > max_size) {
 						throw bad_alloc();
@@ -141,7 +137,6 @@ namespace argo {
 						return nullptr;
 					}
 					char* ptr = &memory[offset];
-					//printf("reserve: %p, %lu mod 4096\n", ptr, (unsigned long)ptr%4096);
 					if(!ptr) {
 						printf("MEMORY POOL WEIRDNESS: %p. pool from %p has size %lu; current use: %lu ;; trying to get %lu\n", ptr, memory, max_size, offset, size);
 					}
@@ -164,14 +159,13 @@ namespace argo {
 					offset = 0;
 
 					try{
-						if(do_grow<growth_mode>()) {
-							memory = allocator->allocate(alloc_size);
-						}
+					  if(do_grow<growth_mode>()) {
+					    memory = allocator->allocate(alloc_size);
+					  }
 					}catch(std::bad_alloc){
 						memory = nullptr;
 					}
 					synchronize<growth_mode>(&memory);
-
 				}
 
 				/**

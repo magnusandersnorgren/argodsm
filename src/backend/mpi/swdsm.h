@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief this is a legacy file from the ArgoDSM prototype
- * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
  * @deprecated this file is legacy and will be removed as soon as possible
  * @warning do not rely on functions from this file
  */
@@ -9,73 +9,62 @@
 #ifndef argo_swdsm_h
 #define argo_swdsm_h argo_swdsm_h
 
-/* Includes */
-#include <cstdint>
-#include <type_traits>
 
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <malloc.h>
-#include <math.h>
-#include <mpi.h>
-#include <pthread.h>
-#include <omp.h>
-#include <semaphore.h>
-#include <signal.h>
+
+/* Includes */
+#include "mpi.h"
+#include "argo.h"
+#include "data_transfer.hpp"
+
+#include <type_traits>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
+#include <math.h>
+
+#include <signal.h>
+#include <malloc.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <semaphore.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <random>
+#include <atomic>
 
-#include "argo.h"
-/** @brief Granularity of coherence unit / pagesize  */
-#define GRAN 4096L //page size.
-
-#ifndef CACHELINE
-/** @brief Size of a ArgoDSM cacheline in number of pages */
-#define CACHELINE 4L
-#endif
 
 #ifndef NUM_THREADS
 /** @brief Number of maximum local threads in each node */
 /**@bug this limits amount of local threads because of pthread barriers being initialized at startup*/
 #define NUM_THREADS 128
 #endif
-/** @brief Number of pages in writebuffer */
-#ifndef WRITE_BUFFER_PAGES
-#define WRITE_BUFFER_PAGES 512L
-#endif
-
-/** @brief Read a value and always get the latest - 'Read-Through' */
-#ifdef __cplusplus
-#define ACCESS_ONCE(x) (*static_cast<std::remove_reference<decltype(x)>::type volatile *>(&(x)))
-#else
-#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
-#endif
 
 /** @brief Hack to avoid warnings when you have unused variables in a function */
 #define UNUSED_PARAM(x) (void)(x)
 
-/** @brief 1 for activating two memory requests in parallel, 0 for disabling*/
-#define DUAL_LOAD 1
+typedef struct my_argo_prefetch_struct
+{
+		void *ptr;
+		unsigned long long size;
+		char mode;
+		float predicted_start;
+		int workerid;
+		void *sched_mutex; //passed from starpu
+} argo_prefetch_t;
 
-/** @brief Wrapper for unsigned char - basically a byte */
-typedef unsigned char argo_byte;
-
-/** @brief Struct for cache control data */
+/** @brief Struct for cache control data*/
 typedef struct myControlData //global cache control data / directory
 {
-		/** @brief Coherence state, basically only Valid/Invalid now */
-		argo_byte state;    //I/P/SW/MW
-		/** @brief Tracks if page is dirty or clean */
-		argo_byte dirty;   //Is this locally dirty?  
-		/** @brief Tracks address of page */
-		long tag;   //addres of global page in distr mem
+		char dirty;   //Is this locally dirty?  
+		unsigned long long tag;   //addres of global page in distr mem
+#ifdef CACHE_TRACE
+		unsigned long long usectr;   //addres of global page in distr mem
+#endif
 } control_data;
 
 /** @brief Struct containing statistics */
@@ -83,6 +72,7 @@ typedef struct argo_statisticsStruct
 {
 		/** @brief Time spend locking */
 		double locktime;
+		double signallock;
 		/** @brief Time spent self invalidating */
 		double selfinvtime; 
 		/** @brief Time spent loading pages */
@@ -92,34 +82,45 @@ typedef struct argo_statisticsStruct
 		/** @brief Time spent writing back from the writebuffer */
 		double writebacktime; 
 		/** @brief Time spent flushing the writebuffer */
-		double flushtime; 
+		double flushtime;
+		double prefetchwait;
+
+		double loadtransfertime;
+		double loadtransferavg;
+		double maptime;
+		double evicttime; 
 		/** @brief Time spent in global barrier */
-		double barriertime; 
+		double barriertime;
+		double searchcachetime; 
 		/** @brief Number of stores */
-		unsigned long stores; 
+		unsigned long long stores;
+		unsigned long long handler_requests; 
 		/** @brief Number of loads */
-		unsigned long loads; 
+		unsigned long long loads; 
 		/** @brief Number of barriers executed */
-		unsigned long barriers; 
+		unsigned long long barriers; 
 		/** @brief Number of writebacks from (full) writebuffer */
-		unsigned long writebacks; 
+		unsigned long long writebacks; 
 		/** @brief Number of locks */
 		int locks;
+		int prefetchesissued;
+		int evictions;
 } argo_statistics;
 
 /*constants for control values*/
 /** @brief Constant for invalid states */
-static const argo_byte INVALID=0;
+static const char INVALID=0;
 /** @brief Constant for valid states */
-static const argo_byte VALID=1;
-/** @brief Constant for clean states */
-static const argo_byte CLEAN=2;
+static const char VALID=1;
+/* @brief Constant for clean states */
+static const char CLEAN=2;
 /** @brief Constant for dirty states */
-static const argo_byte DIRTY=3;
+static const char DIRTY=3;
 /** @brief Constant for writer states */
-static const argo_byte WRITER=4;
+static const char WRITER=4;
 /** @brief Constant for reader states */
-static const argo_byte READER=5;
+static const char READER=5;
+static const char PREFETCH=6;
 
 /*Handler*/
 /**
@@ -147,18 +148,9 @@ void argo_initialize(unsigned long long size);
  */
 void argo_finalize();
 
-/*Global alloc*/
-/**
- * @brief Allocates memory in global address space
- * @param size amount of memory to allocate
- * @return pointer to allocated memory or NULL if failed.
- */
-void * argo_gmalloc(unsigned long size);
-
 /*Synchronization*/
-
 /**
- * @brief Self-Invalidates all memory that has potential writers
+ * @brief Self-Invalidates all memory in caches
  */
 void self_invalidation();
 
@@ -190,42 +182,11 @@ void argo_acq_rel();
  */
 void flushWriteBuffer(void);
 
-/**
- * @brief Adds an entry to the writebuffer - if buffer is full writeback the least recent entry
- * @param cacheIndex index of cache that should be entered in the writebuffer
- */
-void addToWriteBuffer(unsigned long cacheIndex);
-
-/**
- * @brief stores a page remotely - only writing back what has been written locally since last synchronization point
- * @param index index in local page cache
- * @param addr address to page in global address space
- */
-void storepageDIFF(unsigned long index, unsigned long addr);
-
-/**
- * @brief Loop-function for writing pages from writebuffer into remote global address space
- * @param x unused
- */
-void *writeloop(void * x);
-
-/**
- * @brief Loop-function for loading pages into global address space
- * @param x unused
- */
-void * loadcacheline(void * x);
-
-/**
- * @brief Loop-function for prefetching pages into global address space
- * @param x unused
- */
-void * prefetchcacheline(void * x);
-
 /*Statistics*/
 /**
  * @brief Clears out all statistics
  */
-void clearStatistics();
+void clear_statistics();
 
 /**
  * @brief wrapper for MPI_Wtime();
@@ -236,21 +197,13 @@ double argo_wtime();
 /**
  * @brief Prints collected statistics
  */
-void printStatistics();
+void print_statistics();
 
 /**
  * @brief Resets current coherence. Collective function called by all threads on all nodes.
  * @param n number of threads currently spawned on each node. 
  */
 void argo_reset_coherence(int n);
-
-/**
- * @brief Gives the ArgoDSM node id for the local process
- * @return Returns the ArgoDSM node id for the local process
- * @deprecated Should use argo_get_nid() instead and eventually remove this
- * @see argo_get_nid()
- */
-unsigned int getID();
 
 /**
  * @brief Gives the ArgoDSM node id for the local process
@@ -265,13 +218,6 @@ unsigned int argo_get_nid();
 unsigned int argo_get_nodes();
 
 /**
- * @brief returns the maximum number of threads per ArgoDSM node (defined by NUM_THREADS)
- * @return NUM_THREADS 
- * @bug NUM_THREADS is not defined properly. DO NOT USE!
- */
-unsigned int getThreadCount();
-
-/**
  * @brief Gives a pointer to the global address space
  * @return Start address of the global address space
  */
@@ -281,83 +227,55 @@ void *argo_get_global_base();
  * @brief Size of global address space
  * @return Size of global address space
  */
-size_t argo_get_global_size();
+unsigned long long argo_get_global_size();
 
-/**
- * @brief Gives out a local thread ID for a local thread assuming NUM_THREADS per node
- * @return a local thread ID for the local thread 
- */
-int argo_get_local_tid();
-
-/**
- * @brief Gives out a global thread ID for a local thread assuming NUM_THREADS per node
- * @return a global thread ID for the local thread 
- * @bug NUM_THREADS is not defined properly. DO NOT USE!
- */
-int argo_get_global_tid();
-/**
- * @brief Registers the local thread to ArgoDSM and gets a local thread ID.
- * @bug NUM_THREADS is not defined properly. DO NOT USE!
- */
-void argo_register_thread();
-/**
- * @brief Pins and registers the local thread
- * @see argo_register_thread()
- */
-void argo_pin_threads();
-
-/*MPI*/
 /**
  * @brief Initializes the MPI environment
  */
 void initmpi();
-/**
- * @brief Initializes a mpi data structure for writing cacheb control data over the network * @brief 
- */
-void init_mpi_struct(void);
-/**
- * @brief Initializes a mpi data structure for writing cacheblocks over the network
- */
-void init_mpi_cacheblock(void);
-/**
- * @brief Checks if something is power of 2
- * @param x a non-negative integer
- * @return 1 if x is 0 or a power of 2, otherwise return 0
- */
-unsigned long isPowerOf2(unsigned long x);
+
 /**
  * @brief Gets cacheindex for a given address
  * @param addr Address in the global address space
+ * @param hint can give some idea why we need the index, perhaps we are using it for prefetching and only want indices that have invalid data etc
  * @return cacheindex where addr should map to in the ArgoDSM page cache
  */
-unsigned long getCacheIndex(unsigned long addr);
+long get_cache_index(unsigned long long addr, unsigned long long hint);
+
 /**
- * @brief Returns an address correspongint to the page addr is addressing
+ * @brief Returns an address corresponding to the page addr is addressing
  * @param addr Address in the global address space
  * @return addr rounded down to nearest multiple of pagesize
  */
-unsigned long alignAddr(unsigned long addr);
+unsigned long long align_addr(unsigned long long addr);
+
 /**
  * @brief Gives homenode for a given address
  * @param addr Address in the global address space
  * @return Process ID of the node backing the memory containing addr
  */
-unsigned long getHomenode(unsigned long addr);
+unsigned long long get_homenode(unsigned long long addr);
+
 /**
  * @brief Gets the offset of an address on the local nodes part of the global memory
  * @param addr Address in the global address space
  * @return addr-(start address of local process part of global memory)
- * @deprecated
- * @todo calls to this should be replaced by appropriate use of global_ptr
  */
-unsigned long getOffset(unsigned long addr);
+unsigned long long get_offset(unsigned long long addr);
+
 /**
  * @brief Gives an index to the sharer/writer vector depending on the address
  * @param addr Address in the global address space
  * @return index for sharer vector for the page
- * @deprecated
- * @todo calls to this should be replaced by appropriate use of global_ptr
  */
-inline unsigned long get_classification_index(uint64_t addr);
+unsigned long long get_classification_index(unsigned long long addr);
+
+int argo_in_cache(void* ptr, unsigned long long size);
+void clear_state();
+void *starpu_prefetcher(void *x);
+double argo_get_taskavg();
+double argo_get_signalavg();
+int argo_get_sched_policy();
+void remove_cache_index(unsigned long long addr, unsigned long long index);
 #endif /* argo_swdsm_h */
 

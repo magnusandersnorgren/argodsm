@@ -28,7 +28,7 @@ namespace argo {
 				node_id_t homenode;
 
 				/** @brief local offset in the ArgoDSM node's local share of the global memory */
-				std::size_t local_offset;
+				unsigned long local_offset;
 
 			public:
 				/** @brief construct nullptr */
@@ -81,7 +81,7 @@ namespace argo {
 				 * @brief return the offset on the home node's local memory share
 				 * @return local offset
 				 */
-				std::size_t offset() {
+				unsigned long offset() {
 					return local_offset;
 				}
 
@@ -122,7 +122,7 @@ namespace argo {
 					nodes = n;
 					start_address = start;
 					total_size = size;
-					size_per_node = size / n;
+					size_per_node = size / (n);
 				}
 
 				/**
@@ -139,7 +139,7 @@ namespace argo {
 				 * @param ptr address to find offset of
 				 * @return the computed offset
 				 */
-				static std::size_t local_offset (char* const ptr) {
+				static unsigned long local_offset (char* const ptr) {
 					return (ptr - start_address) - homenode(ptr)*size_per_node;
 				}
 
@@ -149,7 +149,7 @@ namespace argo {
 				 * @param offset the offset in the home node's memory share
 				 * @return a pointer to the requested address
 				 */
-				static char* get_ptr(const node_id_t homenode, const std::size_t offset) {
+				static char* get_ptr(const node_id_t homenode, unsigned long offset) {
 					return start_address + homenode*size_per_node + offset;
 				}
 		};

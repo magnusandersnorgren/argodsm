@@ -23,11 +23,12 @@ namespace argo {
 		 */
 		void* start_address();
 
+		void* shadow_address();
 		/**
 		 * @brief get size of the ArgoDSM virtual memory
 		 * @return the size of the ArgoDSM virtual memory
 		 */
-		std::size_t size();
+		unsigned long size();
 
 		/**
 		 * @brief allocate memory that can be mapped into ArgoDSM virtual address space later
@@ -38,7 +39,7 @@ namespace argo {
 		 *          Any memory allocated through other means may not be possible to map
 		 *          into the visible ArgoDSM virtual memory space later.
 		 */
-		void* allocate_mappable(std::size_t alignment, std::size_t size);
+		void* allocate_mappable(unsigned long alignment, unsigned long size);
 
 		/**
 		 * @brief map memory into ArgoDSM virtual address space
@@ -47,7 +48,7 @@ namespace argo {
 		 * @param offset the offset into the backing memory
 		 * @param prot protection flags for the mapping
 		 */
-		void map_memory(void* addr, std::size_t size, std::size_t offset, int prot);
+		void map_memory(void* addr, unsigned long size, unsigned long offset, int prot);
 	} // namespace virtual_memory
 } // namespace argo
 

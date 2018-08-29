@@ -8,7 +8,7 @@
 #define argo_global_mempool_hpp argo_global_mempool_hpp
 
 /** @todo Documentation */
-constexpr int PAGESIZE = 4096;
+constexpr int PAGESIZE = 40960;
 
 #include "../backend/backend.hpp"
 #include "../synchronization/global_tas_lock.hpp"
@@ -24,18 +24,18 @@ namespace argo {
 		/**
 		 * @brief Globalally growing memory pool
 		 */
-		template<std::size_t chunk_size=4096>
+		template<std::size_t chunk_size=409600000>
 		class global_memory_pool {
 			private:
 				/** @brief current base address of this memory pool's memory */
 				char* memory;
 
 				/** @brief current size of the memory pool */
-				std::size_t max_size;
+				unsigned long max_size;
 
 				/** @brief amount of memory in pool that is already allocated */
-				std::ptrdiff_t* offset;
-
+				//std::ptrdiff_t* offset;
+				unsigned long *offset;
 				/** @todo Documentation */
 				argo::globallock::global_tas_lock *global_tas_lock;
 			public:
@@ -43,36 +43,44 @@ namespace argo {
 				using bad_alloc = std::bad_alloc;
 
 				/** reserved space for internal use */
-				static const std::size_t reserved = 4096;
+				unsigned long reserved = 40960;
 				/**
 				 * @brief Default constructor: initializes memory on heap and sets offset to 0
 				 * @param size The amount of memory in the pool
 				 */
-				global_memory_pool(std::size_t size) {
-					size+=reserved;
+				global_memory_pool(unsigned long size) {
+					//size+=reserved;
 					backend::init(size);
 					auto nodes = backend::number_of_nodes();
 					memory = backend::global_base();
 					max_size = backend::global_size();
-					offset = new (&memory[0]) ptrdiff_t;
+					if(nodes > 1){
+							reserved = max_size/nodes;
+					}
+					//offset = new (&memory[0]) ptrdiff_t;
+					//offset = new (&memory[0]) unsigned long;
+					offset = (unsigned long *) malloc(sizeof(unsigned long));
 					/**@todo this initialization should move to tools::init() land */
 					using namespace data_distribution;
 					naive_data_distribution<0>::set_memory_space(nodes, memory, max_size);
-					bool* flag = new (&memory[sizeof(std::size_t)]) bool;
+					//					bool* flag = new (&memory[sizeof(std::size_t)]) bool;
+					bool* flag = new (&memory[sizeof(long)]) bool;
 					global_tas_lock = new argo::globallock::global_tas_lock(flag);
 
-					if(backend::node_id()==0){
-						/**@todo if needed - pad offset to be page or pagecache size and make sure offset and flag fits */
-						*offset = static_cast<std::ptrdiff_t>(reserved);
-					}
+					//if(backend::node_id()==0){
+					  /**@todo if needed - pad offset to be page or pagecache size and make sure offset and flag fits */
+						//					  *offset = static_cast<std::ptrdiff_t>(reserved);
+					  *offset = static_cast<long>(reserved);
+						//}
 					backend::barrier();
 				}
 
 				/** @todo Documentation */
 				~global_memory_pool(){
+					backend::finalize();
 					printf("Total memory used during ArgoDSM lifetime: %ld\n", *offset);
 					delete global_tas_lock;
-					backend::finalize();
+
 				};
 
 				/**
@@ -84,10 +92,11 @@ namespace argo {
 					backend::barrier();
 					memory = backend::global_base();
 					max_size = backend::global_size();
-					if(backend::node_id()==0){
+					//if(backend::node_id()==0){
 						/**@todo if needed - pad offset to be page or pagecache size and make sure offset and flag fits */
-						*offset = static_cast<std::ptrdiff_t>(reserved);
-					}
+						//						*offset = static_cast<std::ptrdiff_t>(reserved);
+						*offset = static_cast<long>(reserved);
+						//}
 					backend::barrier();
 				}
 
@@ -97,13 +106,15 @@ namespace argo {
 				 * @return The pointer to the first byte of the newly reserved memory area
 				 * @todo move size check to separate function?
 				 */
-				char* reserve(std::size_t size, std::size_t alignment=32) {
+				char* reserve(unsigned long size, std::size_t alignment=32) {
 					char* ptr;
+
 					global_tas_lock->lock();
 					if(*offset+size > max_size) {
 						global_tas_lock->unlock();
 						throw bad_alloc();
 					}
+
 					*offset = ((*offset+alignment-1)/alignment)*alignment;
 					ptr = &memory[*offset];
 					*offset += size;

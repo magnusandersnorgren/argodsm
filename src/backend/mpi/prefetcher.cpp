@@ -23,10 +23,11 @@ extern long GLOBAL_NULL;
 extern argo_statistics stats;
 
 #ifndef LOOKAHEAD
-#define LOOKAHEAD 1
+#define LOOKAHEAD 4
 #endif
 
-#define ARGO_PREFETCH_DEBUG 1
+//#define ARGO_PREFETCH_DEBUG 1
+
 namespace vm = argo::virtual_memory;
 typedef struct ip_tracker
 {
@@ -108,13 +109,13 @@ void init_prefetcher(){
 
 /** @brief stream prefetching Adapted from http://comparch-conf.gatech.edu/dpc2/ */
 bool stream_plus(unsigned long addr){ //Just stream prefetch ahead without confidence check
-
 	unsigned long long int pf_addr = (addr + (pagesize*pageline)); //Where to start to fetch from
-	if(pthread_mutex_trylock(&mapmutex) != 0){return false;} 
+	if(pthread_mutex_trylock(&mapmutex)!= 0){ return false;} 
 	long pf_index = get_cache_index(pf_addr,0);
 	pthread_mutex_unlock(&mapmutex);
 	if(pf_index <= 0){return false;}
 
+	
 	unsigned long endline = LOOKAHEAD;
 	unsigned long lines = LOOKAHEAD;
 	bool mprotted = false;
@@ -122,7 +123,6 @@ bool stream_plus(unsigned long addr){ //Just stream prefetch ahead without confi
 	int i;
 	for(i=0; i<lines; i++){
 		long cacheindex = pf_index+i;
-
 		//lock cachelines
 		if(pthread_mutex_trylock(&cachemutex[cacheindex%cachelocks]) != 0){ 
 			endline = i;
@@ -165,19 +165,22 @@ bool stream_plus(unsigned long addr){ //Just stream prefetch ahead without confi
 		}
 		pthread_mutex_unlock(&mapmutex);
 
-		for(i=0; i<endline; i++){
-			printf("prefetching :(%d,%d)\n",pf_index,pf_index+i);
-			long cacheindex = pf_index+i;
-			unsigned long long tmptag = pf_addr+i*pagesize*pageline;
-			prefetch_line(cacheindex, tmptag, get_homenode(tmptag), get_offset(tmptag));
-		}
-		end_prefetch_epoch();
-		double map1 = MPI_Wtime();
-//maybe you want to prefetch this to RW protection immediately (Set PROT_READ|PROT_WRITE and cache_control[cacheindex].dirty = DIRTY) Also need to set up pagecopies if we want to be able to do partial write backs. (Diffs)
-		vm::map_memory(global_base_addr+pf_addr, pagesize*pageline*endline, pagesize*pageline*pf_index, PROT_READ); 
-		double map2 = MPI_Wtime();
-	}
 
+	for(i=0; i<endline; i++){
+#ifdef ARGO_PREFETCH_DEBUG
+		printf("prefetching :(%d,%d)\n",pf_index,pf_index+i);
+#endif
+		long cacheindex = pf_index+i;
+		unsigned long long tmptag = pf_addr+i*pagesize*pageline;
+		prefetch_line(cacheindex, tmptag, get_homenode(tmptag), get_offset(tmptag));
+	}
+	end_prefetch_epoch();
+	double map1 = MPI_Wtime();
+	//maybe you want to prefetch this to RW protection immediately (Set PROT_READ|PROT_WRITE and cache_control[cacheindex].dirty = DIRTY) Also need to set up pagecopies if we want to be able to do partial write backs. (Diffs)
+	vm::map_memory(global_base_addr+pf_addr, pagesize*pageline*endline, pagesize*pageline*pf_index, PROT_READ); 
+	double map2 = MPI_Wtime();
+	}	
+	
 	for(i=0; i<endline; i++){ //Unlock cachelines
 		long cacheindex = pf_index+endline-1-i;
 		pthread_mutex_unlock(&cachemutex[cacheindex%cachelocks]);

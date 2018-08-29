@@ -59,7 +59,11 @@ namespace argo {
 	 * @return The total number of ArgoDSM nodes
 	 */
 	int number_of_nodes();
-
+	double get_taskavg();
+	int get_sched_policy();
+	double get_signalavg();
+	int in_cache(void* ptr, size_t size);
+	void clear_state();
 } // namespace argo
 
 #endif /* argo_argo_hpp */
