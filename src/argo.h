@@ -40,7 +40,6 @@ int  argo_node_id();
  * @return The total number of ArgoDSM nodes
  */
 int  argo_number_of_nodes();
-
 int argo_is_ready();
 int argo_get_sched_policy();
 double argo_get_taskavg();
